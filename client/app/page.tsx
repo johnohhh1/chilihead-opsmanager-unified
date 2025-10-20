@@ -120,9 +120,9 @@ export default function OpsManagerDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
       {/* Header with Navigation */}
-      <header className="bg-white shadow-sm border-b border-slate-200">
+      <header className="bg-gray-800 shadow-sm border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-8">
@@ -132,8 +132,8 @@ export default function OpsManagerDashboard() {
                   <Brain className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900">🌶️ ChiliHead OpsManager</h1>
-                  <p className="text-xs text-gray-500">AI Email + Leadership Delegations</p>
+                  <h1 className="text-xl font-bold text-white">🌶️ ChiliHead OpsManager</h1>
+                  <p className="text-xs text-gray-400">AI Email + Leadership Delegations</p>
                 </div>
               </div>
 
@@ -144,7 +144,7 @@ export default function OpsManagerDashboard() {
                   className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 ${
                     currentPage === 'triage'
                       ? 'bg-red-500 text-white'
-                      : 'text-gray-600 hover:bg-gray-100'
+                      : 'text-gray-300 hover:bg-gray-700'
                   }`}
                 >
                   <Inbox className="h-4 w-4" />
@@ -159,7 +159,7 @@ export default function OpsManagerDashboard() {
                   className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 ${
                     currentPage === 'todo'
                       ? 'bg-red-500 text-white'
-                      : 'text-gray-600 hover:bg-gray-100'
+                      : 'text-gray-300 hover:bg-gray-700'
                   }`}
                 >
                   <CheckSquare className="h-4 w-4" />
@@ -176,7 +176,7 @@ export default function OpsManagerDashboard() {
                   className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 ${
                     currentPage === 'delegations'
                       ? 'bg-red-500 text-white'
-                      : 'text-gray-600 hover:bg-gray-100'
+                      : 'text-gray-300 hover:bg-gray-700'
                   }`}
                 >
                   <Users className="h-4 w-4" />
@@ -191,8 +191,8 @@ export default function OpsManagerDashboard() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <Sparkles className="h-4 w-4 text-yellow-500" />
+              <div className="flex items-center space-x-2 text-sm text-gray-300">
+                <Sparkles className="h-4 w-4 text-yellow-400" />
                 <span>Powered by GPT-4</span>
               </div>
             </div>

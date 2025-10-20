@@ -148,15 +148,15 @@ export default function DelegationsPage() {
           <p className="mt-4 text-gray-600">Loading delegations...</p>
         </div>
       ) : filteredDelegations.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-          <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">🌶️ ChiliHead Delegation Hub</h2>
-          <p className="text-gray-600 mb-6">
+        <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-12 text-center">
+          <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2">🌶️ ChiliHead Delegation Hub</h2>
+          <p className="text-gray-300 mb-6">
             Start developing your team with the 5-Pillar Methodology
           </p>
-          
-          <div className="bg-gray-50 rounded-lg p-6 max-w-md mx-auto mb-6">
-            <h3 className="font-semibold text-gray-800 mb-3">The ChiliHead Commitment:</h3>
+
+          <div className="bg-gray-700 rounded-lg p-6 max-w-md mx-auto mb-6">
+            <h3 className="font-semibold text-white mb-3">The ChiliHead Commitment:</h3>
             <div className="space-y-2 text-left">
               {[
                 'Sense of Belonging',
@@ -165,7 +165,7 @@ export default function DelegationsPage() {
                 'Support',
                 'Accountability'
               ].map((item) => (
-                <div key={item} className="flex items-center text-sm">
+                <div key={item} className="flex items-center text-sm text-gray-300">
                   <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
                   <span>{item}</span>
                 </div>
@@ -191,16 +191,16 @@ export default function DelegationsPage() {
               <button
                 key={delegation.id}
                 onClick={() => router.push(`/delegations/${delegation.id}`)}
-                className={`w-full text-left bg-white rounded-lg shadow-sm p-6 border-l-4 hover:shadow-md transition-all ${
-                  overdue ? 'border-red-500 bg-red-50' : 'border-green-500'
+                className={`w-full text-left bg-gray-800 border border-gray-700 rounded-lg shadow-sm p-6 border-l-4 hover:shadow-md transition-all ${
+                  overdue ? 'border-l-red-500 bg-red-900/20' : 'border-l-green-500'
                 }`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    <h3 className="text-lg font-semibold text-white mb-1">
                       {delegation.task_description}
                     </h3>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-300">
                       Assigned to: <span className="font-medium">{delegation.assigned_to}</span>
                     </p>
                   </div>
@@ -219,7 +219,7 @@ export default function DelegationsPage() {
                 {delegation.due_date && (
                   <div className="flex items-center text-sm mb-3">
                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                    <span className={overdue ? 'text-red-600 font-medium' : 'text-gray-600'}>
+                    <span className={overdue ? 'text-red-400 font-medium' : 'text-gray-300'}>
                       Due: {new Date(delegation.due_date).toLocaleDateString()}
                       {overdue && ' (Overdue!)'}
                     </span>
@@ -229,8 +229,8 @@ export default function DelegationsPage() {
                 {/* Progress Bar */}
                 <div className="mb-3">
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-600 font-medium">ChiliHead Progress</span>
-                    <span className="text-gray-600">{completedSteps}/5</span>
+                    <span className="text-gray-300 font-medium">ChiliHead Progress</span>
+                    <span className="text-gray-300">{completedSteps}/5</span>
                   </div>
                   <div className="flex space-x-1">
                     {['senseOfBelonging', 'clearDirection', 'preparation', 'support', 'accountability'].map((key, index) => {
@@ -250,9 +250,9 @@ export default function DelegationsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-gray-500">
+                <div className="flex items-center justify-between text-xs text-gray-400">
                   <span>Created: {new Date(delegation.created_at).toLocaleDateString()}</span>
-                  <span className="flex items-center text-blue-600">
+                  <span className="flex items-center text-red-400">
                     View Details <ArrowRight className="h-3 w-3 ml-1" />
                   </span>
                 </div>

@@ -261,11 +261,11 @@ export default function TodoPage() {
       <div
         key={task.id}
         className={`border rounded-lg p-4 transition-all ${
-          task.completed 
-            ? 'bg-gray-50 opacity-60 border-gray-200' 
-            : isOverdue 
-            ? 'bg-red-50 border-red-300'
-            : 'bg-white hover:shadow-md border-gray-200'
+          task.completed
+            ? 'bg-gray-900 opacity-60 border-gray-700'
+            : isOverdue
+            ? 'bg-red-900/20 border-red-600'
+            : 'bg-gray-700 hover:shadow-md border-gray-600'
         }`}
       >
         <div className="flex items-start space-x-3">
@@ -321,19 +321,19 @@ export default function TodoPage() {
                     if (e.key === 'Enter') saveEdit(task.id);
                     if (e.key === 'Escape') cancelEdit();
                   }}
-                  className="flex-1 px-3 py-2 border border-blue-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="flex-1 px-3 py-2 border border-red-500 bg-gray-600 text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   autoFocus
                 />
                 <button
                   onClick={() => saveEdit(task.id)}
-                  className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                  className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                   title="Save"
                 >
                   <Save className="h-4 w-4" />
                 </button>
                 <button
                   onClick={cancelEdit}
-                  className="p-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                  className="p-2 bg-gray-600 text-gray-300 rounded-lg hover:bg-gray-500"
                   title="Cancel"
                 >
                   <X className="h-4 w-4" />
@@ -341,16 +341,16 @@ export default function TodoPage() {
               </div>
             ) : (
               <div className="flex items-center space-x-2 mb-2 group">
-                <h3 className={`flex-1 font-medium text-gray-900 break-words ${task.completed ? 'line-through' : ''}`}>
+                <h3 className={`flex-1 font-medium text-white break-words ${task.completed ? 'line-through' : ''}`}>
                   {task.action}
                 </h3>
                 {!task.completed && (
                   <button
                     onClick={() => startEditing(task)}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded"
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-600 rounded"
                     title="Edit task"
                   >
-                    <Edit2 className="h-4 w-4 text-gray-500" />
+                    <Edit2 className="h-4 w-4 text-gray-400" />
                   </button>
                 )}
               </div>
@@ -359,11 +359,11 @@ export default function TodoPage() {
             {/* Category dropdown - only show for active tasks */}
             {!task.completed && (
               <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-500">Move to:</span>
+                <span className="text-xs text-gray-400">Move to:</span>
                 <select
                   value={category}
                   onChange={(e) => updateCategory(task.id, e.target.value as TodoItem['category'])}
-                  className="text-xs px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="text-xs px-2 py-1 rounded border border-gray-600 bg-gray-600 text-white hover:bg-gray-500 cursor-pointer focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 >
                   <option value="urgent-important">🔴 Urgent & Important</option>
                   <option value="important-not-urgent">🟠 Important</option>
@@ -376,10 +376,10 @@ export default function TodoPage() {
 
           <button
             onClick={() => deleteTask(task.id)}
-            className="p-1 hover:bg-red-50 rounded flex-shrink-0"
+            className="p-1 hover:bg-red-900/20 rounded flex-shrink-0"
             title="Delete task"
           >
-            <Trash2 className="h-4 w-4 text-red-500" />
+            <Trash2 className="h-4 w-4 text-red-400" />
           </button>
         </div>
       </div>
@@ -389,9 +389,9 @@ export default function TodoPage() {
   return (
     <div className="space-y-6">
       {/* Add New Task Form */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl shadow-sm border border-blue-200 p-4">
+      <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-4">
         <div className="flex items-start space-x-3">
-          <Plus className="h-6 w-6 text-blue-600 mt-2 flex-shrink-0" />
+          <Plus className="h-6 w-6 text-red-600 mt-2 flex-shrink-0" />
           <div className="flex-1 space-y-3">
             <input
               type="text"
@@ -401,16 +401,16 @@ export default function TodoPage() {
                 if (e.key === 'Enter' && !addingTask) addNewTask();
               }}
               placeholder="Add a new task... (Press Enter to add)"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500"
+              className="w-full px-4 py-3 border border-gray-600 bg-gray-700 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-white placeholder-gray-400"
             />
 
             <div className="flex items-center space-x-3 flex-wrap gap-2">
               <div className="flex items-center space-x-2">
-                <label className="text-sm font-medium text-gray-700">Priority:</label>
+                <label className="text-sm font-medium text-gray-300">Priority:</label>
                 <select
                   value={newTaskPriority}
                   onChange={(e) => setNewTaskPriority(e.target.value)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-1.5 border border-gray-600 bg-gray-700 text-white rounded-lg text-sm focus:ring-2 focus:ring-red-500"
                 >
                   <option value="normal">Normal</option>
                   <option value="high">High</option>
@@ -419,19 +419,19 @@ export default function TodoPage() {
               </div>
 
               <div className="flex items-center space-x-2">
-                <label className="text-sm font-medium text-gray-700">Due Date:</label>
+                <label className="text-sm font-medium text-gray-300">Due Date:</label>
                 <input
                   type="date"
                   value={newTaskDueDate}
                   onChange={(e) => setNewTaskDueDate(e.target.value)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-1.5 border border-gray-600 bg-gray-700 text-white rounded-lg text-sm focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
               <button
                 onClick={addNewTask}
                 disabled={!newTaskText.trim() || addingTask}
-                className="ml-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium text-sm flex items-center space-x-2"
+                className="ml-auto px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed font-medium text-sm flex items-center space-x-2"
               >
                 {addingTask ? (
                   <>
@@ -451,15 +451,15 @@ export default function TodoPage() {
       </div>
 
       {/* Header with filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center space-x-4">
-            <h2 className="text-lg font-bold text-gray-900">Todo List</h2>
+            <h2 className="text-lg font-bold text-white">Todo List</h2>
 
             <div className="flex items-center space-x-3 text-sm">
-              <span className="text-gray-600">{activeTasks.length} active</span>
-              <span className="text-gray-400">•</span>
-              <span className="text-gray-600">{completedTasks.length} completed</span>
+              <span className="text-gray-300">{activeTasks.length} active</span>
+              <span className="text-gray-500">•</span>
+              <span className="text-gray-300">{completedTasks.length} completed</span>
             </div>
           </div>
 
@@ -469,7 +469,7 @@ export default function TodoPage() {
               <button
                 onClick={() => setFilter('active')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  filter === 'active' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  filter === 'active' ? 'bg-red-600 text-white' : 'text-gray-300 hover:bg-gray-700'
                 }`}
               >
                 Active
@@ -477,7 +477,7 @@ export default function TodoPage() {
               <button
                 onClick={() => setFilter('completed')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  filter === 'completed' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  filter === 'completed' ? 'bg-red-600 text-white' : 'text-gray-300 hover:bg-gray-700'
                 }`}
               >
                 Completed
@@ -491,7 +491,7 @@ export default function TodoPage() {
                 <select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer focus:ring-2 focus:ring-blue-500"
+                  className="text-sm px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700 text-white hover:bg-gray-600 cursor-pointer focus:ring-2 focus:ring-red-500"
                 >
                   <option value="all">All Categories</option>
                   <option value="urgent-important">🔴 Urgent & Important</option>
@@ -502,12 +502,12 @@ export default function TodoPage() {
               </div>
             )}
 
-            <button 
-              onClick={fetchTasks} 
-              className="p-2 hover:bg-gray-100 rounded-lg" 
+            <button
+              onClick={fetchTasks}
+              className="p-2 hover:bg-gray-700 rounded-lg"
               title="Refresh"
             >
-              <RefreshCw className={`h-5 w-5 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-5 w-5 text-gray-300 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -515,22 +515,22 @@ export default function TodoPage() {
 
       {/* Task List */}
       {loading ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+        <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-8 text-center">
           <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-gray-400" />
-          <p className="text-gray-500">Loading tasks...</p>
+          <p className="text-gray-300">Loading tasks...</p>
         </div>
       ) : filteredTasks.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+        <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-8 text-center">
           <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
-          <p className="text-lg font-medium text-gray-700">
+          <p className="text-lg font-medium text-white">
             {filter === 'completed' ? 'No completed tasks yet' : 'All caught up!'}
           </p>
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-sm text-gray-400 mt-2">
             {filter === 'completed' ? 'Complete some tasks to see them here' : 'No active tasks'}
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-4">
           <div className="space-y-3">
             {filteredTasks.map(task => renderTask(task))}
           </div>

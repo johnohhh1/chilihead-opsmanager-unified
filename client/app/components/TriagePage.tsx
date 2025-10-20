@@ -421,17 +421,17 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
   if (isAuthenticated === false) {
     return (
       <div className="space-y-6">
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-12 text-center max-w-2xl mx-auto">
+        <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-12 text-center max-w-2xl mx-auto">
           <div className="mb-6">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-red-500 to-orange-500 rounded-full mb-4">
               <Mail className="h-10 w-10 text-white" />
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Connect Your Gmail</h2>
-            <p className="text-gray-600 mb-8">
+            <h2 className="text-3xl font-bold text-white mb-2">Connect Your Gmail</h2>
+            <p className="text-gray-300 mb-8">
               Sign in with Google to enable AI-powered email triage and smart inbox management.
             </p>
           </div>
-          
+
           <div className="space-y-4">
             <a
               href={authUrl}
@@ -440,10 +440,10 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
               <Mail className="h-6 w-6" />
               <span>Sign in with Google</span>
             </a>
-            
-            <div className="mt-8 p-6 bg-gray-50 rounded-lg text-left">
-              <h3 className="font-semibold text-gray-900 mb-3">What you'll get:</h3>
-              <ul className="space-y-2 text-sm text-gray-700">
+
+            <div className="mt-8 p-6 bg-gray-700 rounded-lg text-left">
+              <h3 className="font-semibold text-white mb-3">What you'll get:</h3>
+              <ul className="space-y-2 text-sm text-gray-300">
                 <li className="flex items-start">
                   <CheckCircle className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
                   <span><strong>AI Email Analysis:</strong> GPT-4 understands context and extracts action items</span>
@@ -462,8 +462,8 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
                 </li>
               </ul>
             </div>
-            
-            <p className="text-xs text-gray-500 mt-6">
+
+            <p className="text-xs text-gray-400 mt-6">
               🔒 Your data is secure. We only access emails you choose to analyze.
             </p>
           </div>
@@ -476,15 +476,15 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
     <div className="space-y-6">
       {/* Preferences Panel */}
       {showPreferences && (
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+        <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-gray-900 flex items-center">
+            <h3 className="text-xl font-bold text-white flex items-center">
               <Settings className="h-6 w-6 mr-2" />
               Watch Configuration
             </h3>
             <button
               onClick={() => setShowPreferences(false)}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-300"
             >
               <X className="h-5 w-5" />
             </button>
@@ -493,19 +493,19 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
           <div className="space-y-6">
             {/* Priority Senders */}
             <div>
-              <h4 className="font-semibold text-gray-900 mb-3">Priority Senders</h4>
+              <h4 className="font-semibold text-white mb-3">Priority Senders</h4>
               <div className="flex space-x-2 mb-3">
                 <input
                   type="email"
                   value={newSender}
                   onChange={(e) => setNewSender(e.target.value)}
                   placeholder="Enter email address"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder-gray-400"
                   onKeyPress={(e) => e.key === 'Enter' && addSender()}
                 />
                 <button
                   onClick={addSender}
-                  className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-medium flex items-center space-x-1"
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center space-x-1"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Add</span>
@@ -513,37 +513,37 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
               </div>
               <div className="space-y-2">
                 {watchConfig.priority_senders.map((sender) => (
-                  <div key={sender} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
-                    <span className="text-sm text-gray-700">{sender}</span>
+                  <div key={sender} className="flex items-center justify-between bg-gray-700 px-3 py-2 rounded-lg">
+                    <span className="text-sm text-gray-300">{sender}</span>
                     <button
                       onClick={() => removeSender(sender)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-red-400 hover:text-red-300"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 ))}
                 {watchConfig.priority_senders.length === 0 && (
-                  <p className="text-sm text-gray-500 italic">No priority senders configured</p>
+                  <p className="text-sm text-gray-400 italic">No priority senders configured</p>
                 )}
               </div>
             </div>
 
             {/* Priority Domains */}
             <div>
-              <h4 className="font-semibold text-gray-900 mb-3">Priority Domains</h4>
+              <h4 className="font-semibold text-white mb-3">Priority Domains</h4>
               <div className="flex space-x-2 mb-3">
                 <input
                   type="text"
                   value={newDomain}
                   onChange={(e) => setNewDomain(e.target.value)}
                   placeholder="Enter domain (e.g., brinker.com)"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder-gray-400"
                   onKeyPress={(e) => e.key === 'Enter' && addDomain()}
                 />
                 <button
                   onClick={addDomain}
-                  className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-medium flex items-center space-x-1"
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center space-x-1"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Add</span>
@@ -551,38 +551,38 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
               </div>
               <div className="space-y-2">
                 {watchConfig.priority_domains.map((domain) => (
-                  <div key={domain} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
-                    <span className="text-sm text-gray-700">{domain}</span>
+                  <div key={domain} className="flex items-center justify-between bg-gray-700 px-3 py-2 rounded-lg">
+                    <span className="text-sm text-gray-300">{domain}</span>
                     <button
                       onClick={() => removeDomain(domain)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-red-400 hover:text-red-300"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 ))}
                 {watchConfig.priority_domains.length === 0 && (
-                  <p className="text-sm text-gray-500 italic">No priority domains configured</p>
+                  <p className="text-sm text-gray-400 italic">No priority domains configured</p>
                 )}
               </div>
             </div>
 
             {/* Excluded Subject Patterns */}
             <div>
-              <h4 className="font-semibold text-gray-900 mb-3">Excluded Subject Patterns</h4>
-              <p className="text-xs text-gray-600 mb-3">Emails with these phrases in the subject will be filtered out</p>
+              <h4 className="font-semibold text-white mb-3">Excluded Subject Patterns</h4>
+              <p className="text-xs text-gray-400 mb-3">Emails with these phrases in the subject will be filtered out</p>
               <div className="flex space-x-2 mb-3">
                 <input
                   type="text"
                   value={newExclusion}
                   onChange={(e) => setNewExclusion(e.target.value)}
                   placeholder="e.g., FW: FYI:, Task Policies"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder-gray-400"
                   onKeyPress={(e) => e.key === 'Enter' && addExclusion()}
                 />
                 <button
                   onClick={addExclusion}
-                  className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-medium flex items-center space-x-1"
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center space-x-1"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Add</span>
@@ -590,18 +590,18 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
               </div>
               <div className="space-y-2">
                 {watchConfig.excluded_subjects.map((pattern) => (
-                  <div key={pattern} className="flex items-center justify-between bg-red-50 px-3 py-2 rounded-lg border border-red-200">
-                    <span className="text-sm text-gray-700">{pattern}</span>
+                  <div key={pattern} className="flex items-center justify-between bg-gray-700 px-3 py-2 rounded-lg border border-red-600">
+                    <span className="text-sm text-gray-300">{pattern}</span>
                     <button
                       onClick={() => removeExclusion(pattern)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-red-400 hover:text-red-300"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 ))}
                 {watchConfig.excluded_subjects.length === 0 && (
-                  <p className="text-sm text-gray-500 italic">No exclusions configured</p>
+                  <p className="text-sm text-gray-400 italic">No exclusions configured</p>
                 )}
               </div>
             </div>
@@ -611,7 +611,7 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
 
       {/* Daily Digest Banner */}
       {showDigest && digest && (
-        <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg p-6">
+        <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-xl shadow-lg p-6 border border-red-700">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h3 className="text-xl font-bold mb-3 flex items-center">
@@ -636,7 +636,7 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
 
       {/* Deadline Scanner Results */}
       {showDeadlines && deadlineReport && (
-        <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-xl shadow-lg p-6">
+        <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-xl shadow-lg p-6 border border-orange-700">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h3 className="text-xl font-bold mb-3 flex items-center">
@@ -684,12 +684,12 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
       )}
 
       {/* Smart Actions Bar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center space-x-4">
-            <h2 className="text-lg font-bold text-gray-900">Smart Email Triage</h2>
-            
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
+            <h2 className="text-lg font-bold text-white">Smart Email Triage</h2>
+
+            <div className="flex items-center space-x-2 text-sm text-gray-300">
               <MessageSquare className="h-4 w-4" />
               <span>AI understands context, not just keywords</span>
             </div>
@@ -700,7 +700,7 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
             <button
               onClick={() => setShowDatePicker(!showDatePicker)}
               className={`px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-2 ${
-                showDatePicker ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                showDatePicker ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
               <Calendar className="h-4 w-4" />
@@ -714,15 +714,15 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-sm"
                   placeholder="From"
                 />
-                <span className="text-gray-500">to</span>
+                <span className="text-gray-400">to</span>
                 <input
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-sm"
                   placeholder="To"
                 />
               </>
@@ -730,7 +730,7 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
               <select
                 value={timeRange}
                 onChange={(e) => setTimeRange(e.target.value)}
-                className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500"
               >
                 <option value="today">📅 Today</option>
                 <option value="yesterday">📅 Yesterday</option>
@@ -743,7 +743,7 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
             {/* PREFERENCES BUTTON */}
             <button
               onClick={() => setShowPreferences(!showPreferences)}
-              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm flex items-center space-x-2"
+              className="px-3 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 font-medium text-sm flex items-center space-x-2"
             >
               <Settings className="h-4 w-4" />
               <span>Settings</span>
@@ -753,9 +753,9 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
             <button
               onClick={() => setHideAcknowledged(!hideAcknowledged)}
               className={`px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-2 transition-colors ${
-                hideAcknowledged 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                hideAcknowledged
+                  ? 'bg-red-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
               {hideAcknowledged ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -764,7 +764,7 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
 
             <button
               onClick={fetchDigest}
-              className="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 font-medium text-sm"
+              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium text-sm"
             >
               Daily Brief
             </button>
@@ -772,7 +772,7 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
             <button
               onClick={fetchDeadlines}
               disabled={deadlineLoading}
-              className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-medium text-sm flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium text-sm flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Calendar className="h-4 w-4" />
               <span>{deadlineLoading ? 'Scanning...' : 'Deadline Scan'}</span>
@@ -780,9 +780,9 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
 
             <button
               onClick={fetchThreads}
-              className="p-2 hover:bg-gray-100 rounded-lg"
+              className="p-2 hover:bg-gray-700 rounded-lg"
             >
-              <RefreshCw className={`h-5 w-5 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-5 w-5 text-gray-300 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -791,19 +791,19 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
       {/* Email List with Smart Analysis */}
       <div className="space-y-3">
         {loading ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+          <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-8 text-center">
             <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-gray-400" />
-            <p className="text-gray-500">Loading emails...</p>
+            <p className="text-gray-300">Loading emails...</p>
           </div>
         ) : visibleThreads.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+          <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-8 text-center">
             <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500" />
-            <p className="text-lg font-medium text-gray-700">
-              {hideAcknowledged && threads.length > 0 
-                ? 'All emails acknowledged!' 
+            <p className="text-lg font-medium text-white">
+              {hideAcknowledged && threads.length > 0
+                ? 'All emails acknowledged!'
                 : 'All caught up!'}
             </p>
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-sm text-gray-400 mt-2">
               {hideAcknowledged && threads.length > 0
                 ? 'Click "Show All" to see acknowledged emails'
                 : 'No urgent emails need your attention'}
@@ -823,11 +823,11 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
             return (
               <div
                 key={thread.id}
-                className={`bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all ${
-                  isExpanded ? 'ring-2 ring-purple-500' : ''
+                className={`bg-gray-800 rounded-xl shadow-sm border border-gray-700 overflow-hidden transition-all ${
+                  isExpanded ? 'ring-2 ring-red-500' : ''
                 } ${isAcknowledged ? 'opacity-60' : ''}`}
               >
-                <div className={`p-4 ${priority.bg}`}>
+                <div className={`p-4 ${isAcknowledged ? 'bg-gray-900' : 'bg-gray-800'}`}>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       {/* Priority and Status */}
@@ -862,18 +862,18 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
                       {/* Sender */}
                       <div className="flex items-center space-x-2 mb-2">
                         <User className="h-4 w-4 text-gray-400" />
-                        <span className="font-medium text-gray-900">{name}</span>
-                        <span className="text-sm text-gray-500">{email}</span>
+                        <span className="font-medium text-white">{name}</span>
+                        <span className="text-sm text-gray-400">{email}</span>
                       </div>
 
                       {/* Subject */}
-                      <h3 className="font-semibold text-gray-900 mb-2">
+                      <h3 className="font-semibold text-white mb-2">
                         {thread.subject || '(No subject)'}
                       </h3>
 
                       {/* Preview */}
                       {!isExpanded && (
-                        <p className="text-sm text-gray-600 line-clamp-2">
+                        <p className="text-sm text-gray-300 line-clamp-2">
                           {thread.snippet}
                         </p>
                       )}
@@ -894,37 +894,37 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
                       <button
                         onClick={() => analyzeThread(thread.id)}
                         disabled={analyzing}
-                        className="px-3 py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-blue-600 flex items-center space-x-1 shadow-md disabled:opacity-50"
+                        className="px-3 py-2 bg-gradient-to-r from-red-600 to-orange-600 text-white text-sm font-medium rounded-lg hover:from-red-700 hover:to-orange-700 flex items-center space-x-1 shadow-md disabled:opacity-50"
                       >
                         <Brain className="h-4 w-4" />
                         <span>AI Analysis</span>
                       </button>
-                      
+
                       <button
                         onClick={() => setExpandedThread(isExpanded ? null : thread.id)}
-                        className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                        className="p-2 bg-gray-700 border border-gray-600 rounded-lg hover:bg-gray-600"
                       >
-                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-300" /> : <ChevronDown className="h-4 w-4 text-gray-300" />}
                       </button>
                     </div>
                   </div>
 
                   {/* Smart AI Analysis */}
                   {isExpanded && analysis && (
-                    <div className="mt-6 pt-6 border-t border-gray-200">
-                      <div className="bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 rounded-xl p-6 border border-purple-200">
+                    <div className="mt-6 pt-6 border-t border-gray-700">
+                      <div className="bg-gray-700 rounded-xl p-6 border border-gray-600">
                         <div className="flex items-center mb-4">
-                          <div className="p-2 bg-purple-100 rounded-lg mr-3">
-                            <Brain className="h-5 w-5 text-purple-600" />
+                          <div className="p-2 bg-red-600 rounded-lg mr-3">
+                            <Brain className="h-5 w-5 text-white" />
                           </div>
                           <div>
-                            <h4 className="font-bold text-gray-900">AI Assistant Analysis</h4>
-                            <p className="text-xs text-gray-600">Understanding context, not just keywords</p>
+                            <h4 className="font-bold text-white">AI Assistant Analysis</h4>
+                            <p className="text-xs text-gray-300">Understanding context, not just keywords</p>
                           </div>
                         </div>
-                        
-                        <div className="prose prose-sm max-w-none">
-                          <div className="text-gray-800 leading-relaxed prose prose-sm max-w-none">
+
+                        <div className="prose prose-sm max-w-none prose-invert">
+                          <div className="text-gray-200 leading-relaxed">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {analysis.analysis || 'No analysis available'}
                             </ReactMarkdown>
@@ -936,23 +936,23 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
 
                         {/* Extracted Actions */}
                         {analysis.tasks && analysis.tasks.length > 0 && (
-                          <div className="mt-6 pt-4 border-t border-purple-200">
-                            <h5 className="text-sm font-bold text-gray-700 mb-3">Extracted Action Items:</h5>
+                          <div className="mt-6 pt-4 border-t border-gray-600">
+                            <h5 className="text-sm font-bold text-white mb-3">Extracted Action Items:</h5>
                             <div className="space-y-2">
                               {analysis.tasks.map((task: any, idx: number) => (
-                                <div key={idx} className="flex items-start space-x-2 bg-white rounded-lg p-3">
+                                <div key={idx} className="flex items-start space-x-2 bg-gray-600 rounded-lg p-3">
                                   <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-gray-800">{task.action}</p>
+                                    <p className="text-sm text-white">{task.action}</p>
                                     <div className="flex items-center space-x-3 mt-1 flex-wrap">
                                       {task.due_date && (
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-gray-300">
                                           <Calendar className="h-3 w-3 inline mr-1" />
                                           Due: {task.due_date}
                                         </span>
                                       )}
                                       {task.time_estimate && (
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-gray-300">
                                           <Clock className="h-3 w-3 inline mr-1" />
                                           ~{task.time_estimate}
                                         </span>
@@ -961,7 +961,7 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
                                   </div>
                                   <button
                                     onClick={() => addSingleTask(task, thread.id)}
-                                    className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded flex items-center space-x-1 flex-shrink-0"
+                                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded flex items-center space-x-1 flex-shrink-0"
                                   >
                                     <Plus className="h-3 w-3" />
                                     <span>Add</span>
@@ -969,10 +969,10 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
                                 </div>
                               ))}
                             </div>
-                            
+
                             <button
                               onClick={() => addAllTasks(analysis.tasks, thread.id)}
-                              className="mt-4 w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg flex items-center justify-center space-x-2"
+                              className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg flex items-center justify-center space-x-2"
                             >
                               <Plus className="h-4 w-4" />
                               <span>Add All to Todo List</span>
