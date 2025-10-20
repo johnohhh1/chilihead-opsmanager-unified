@@ -611,7 +611,7 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
 
       {/* Daily Digest Banner */}
       {showDigest && digest && (
-        <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-xl shadow-lg p-6 border border-red-700">
+        <div className="bg-gradient-to-r from-blue-900 to-blue-800 text-white rounded-xl shadow-lg p-6 border border-blue-800">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h3 className="text-xl font-bold mb-3 flex items-center">
