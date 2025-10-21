@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002';
 
+// Disable caching for this route
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET() {
   try {
     const response = await fetch(`${BACKEND_URL}/models/list`, {
@@ -9,6 +13,7 @@ export async function GET() {
       headers: {
         'Content-Type': 'application/json',
       },
+      cache: 'no-store',  // Don't cache the response
     });
 
     if (!response.ok) {
