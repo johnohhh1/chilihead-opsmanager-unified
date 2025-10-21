@@ -203,11 +203,11 @@ export default function OpsManagerDashboard() {
       {/* Page Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {currentPage === 'triage' ? (
-          <TriagePage onAddToTodo={handleAddToTodo} />
+          <TriagePage onAddToTodo={handleAddToTodo} onNavigate={setCurrentPage} />
         ) : currentPage === 'todo' ? (
-          <TodoPage />
+          <TodoPage onNavigate={setCurrentPage} />
         ) : (
-          <DelegationsPage />
+          <DelegationsPage onNavigate={setCurrentPage} />
         )}
       </div>
 

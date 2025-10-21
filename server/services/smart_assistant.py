@@ -10,6 +10,7 @@ from .gmail import get_thread_messages
 import json
 from datetime import datetime, timedelta
 import re
+import pytz
 
 load_dotenv()
 
@@ -377,7 +378,6 @@ def daily_digest() -> dict:
     """
     from .gmail import get_user_threads
     from .priority_filter import load_watch_config
-    import pytz
 
     # Use Eastern Time for all operations
     eastern = pytz.timezone('America/New_York')

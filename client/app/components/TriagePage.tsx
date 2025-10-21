@@ -28,6 +28,7 @@ interface EmailThread {
 
 interface TriagePageProps {
   onAddToTodo: (items: any[], threadId?: string) => Promise<void>;
+  onNavigate?: (page: 'triage' | 'todo' | 'delegations') => void;
 }
 
 interface WatchConfig {
@@ -39,7 +40,7 @@ interface WatchConfig {
   include_unread_only: boolean;
 }
 
-export default function TriagePage({ onAddToTodo }: TriagePageProps) {
+export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps) {
   const [threads, setThreads] = useState<EmailThread[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -289,7 +290,8 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
   // Get daily digest
   const fetchDigest = async () => {
     try {
-      const response = await fetch('/api/backend/daily-digest');
+      // Add timestamp to force fresh fetch (no caching)
+      const response = await fetch(`/api/backend/daily-digest?t=${Date.now()}`);
       const data = await response.json();
       setDigest(data.digest);
       setShowDigest(true);
@@ -474,6 +476,32 @@ export default function TriagePage({ onAddToTodo }: TriagePageProps) {
 
   return (
     <div className="space-y-6">
+      {/* Navigation Tabs */}
+      {onNavigate && (
+        <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-3">
+          <nav className="flex space-x-2">
+            <button
+              onClick={() => onNavigate('triage')}
+              className="px-4 py-2 rounded-lg font-medium text-sm bg-red-500 text-white"
+            >
+              📧 Email Triage
+            </button>
+            <button
+              onClick={() => onNavigate('todo')}
+              className="px-4 py-2 rounded-lg font-medium text-sm text-gray-300 hover:bg-gray-700"
+            >
+              ✓ Todo List
+            </button>
+            <button
+              onClick={() => onNavigate('delegations')}
+              className="px-4 py-2 rounded-lg font-medium text-sm text-gray-300 hover:bg-gray-700"
+            >
+              🌶️ Delegations
+            </button>
+          </nav>
+        </div>
+      )}
+
       {/* Preferences Panel */}
       {showPreferences && (
         <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6">

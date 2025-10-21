@@ -19,7 +19,11 @@ interface TodoItem {
   category?: 'urgent-important' | 'important-not-urgent' | 'urgent-not-important' | 'neither';
 }
 
-export default function TodoPage() {
+interface TodoPageProps {
+  onNavigate?: (page: 'triage' | 'todo' | 'delegations') => void;
+}
+
+export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
   const [tasks, setTasks] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'active' | 'completed'>('active');
@@ -388,6 +392,32 @@ export default function TodoPage() {
 
   return (
     <div className="space-y-6">
+      {/* Navigation Tabs */}
+      {onNavigate && (
+        <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-3">
+          <nav className="flex space-x-2">
+            <button
+              onClick={() => onNavigate('triage')}
+              className="px-4 py-2 rounded-lg font-medium text-sm text-gray-300 hover:bg-gray-700"
+            >
+              📧 Email Triage
+            </button>
+            <button
+              onClick={() => onNavigate('todo')}
+              className="px-4 py-2 rounded-lg font-medium text-sm bg-red-500 text-white"
+            >
+              ✓ Todo List
+            </button>
+            <button
+              onClick={() => onNavigate('delegations')}
+              className="px-4 py-2 rounded-lg font-medium text-sm text-gray-300 hover:bg-gray-700"
+            >
+              🌶️ Delegations
+            </button>
+          </nav>
+        </div>
+      )}
+
       {/* Add New Task Form */}
       <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-4">
         <div className="flex items-start space-x-3">

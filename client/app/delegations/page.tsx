@@ -27,7 +27,11 @@ interface Delegation {
   chilihead_progress: ChiliHeadProgress;
 }
 
-export default function DelegationsPage() {
+interface DelegationsPageProps {
+  onNavigate?: (page: 'triage' | 'todo' | 'delegations') => void;
+}
+
+export default function DelegationsPage({ onNavigate }: DelegationsPageProps = {}) {
   const router = useRouter();
   const [delegations, setDelegations] = useState<Delegation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +86,32 @@ export default function DelegationsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Navigation Tabs */}
+      {onNavigate && (
+        <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-3">
+          <nav className="flex space-x-2">
+            <button
+              onClick={() => onNavigate('triage')}
+              className="px-4 py-2 rounded-lg font-medium text-sm text-gray-300 hover:bg-gray-700"
+            >
+              📧 Email Triage
+            </button>
+            <button
+              onClick={() => onNavigate('todo')}
+              className="px-4 py-2 rounded-lg font-medium text-sm text-gray-300 hover:bg-gray-700"
+            >
+              ✓ Todo List
+            </button>
+            <button
+              onClick={() => onNavigate('delegations')}
+              className="px-4 py-2 rounded-lg font-medium text-sm bg-red-500 text-white"
+            >
+              🌶️ Delegations
+            </button>
+          </nav>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-lg shadow-lg p-6 text-white">
         <div className="flex items-center justify-between mb-4">
