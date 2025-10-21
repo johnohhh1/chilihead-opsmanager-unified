@@ -13,12 +13,21 @@ interface OperationsChatProps {
   operations?: any[];
 }
 
+interface ModelOption {
+  id: string;
+  name: string;
+  provider: string;
+  default?: boolean;
+}
+
 export default function OperationsChat({ dailyDigest, operations }: OperationsChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string>("gpt-4o");
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom
@@ -26,12 +35,41 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Load available models when component mounts
+  useEffect(() => {
+    loadModels();
+  }, []);
+
   // Load chat history from PostgreSQL when opening
   useEffect(() => {
     if (isOpen && !sessionId) {
       loadRecentSession();
     }
   }, [isOpen]);
+
+  // Load available AI models
+  const loadModels = async () => {
+    try {
+      const response = await fetch('/api/backend/models/list');
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableModels(data.models);
+        // Load saved model preference from localStorage
+        const savedModel = localStorage.getItem('preferred-ai-model');
+        if (savedModel) {
+          setSelectedModel(savedModel);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load models:', error);
+    }
+  };
+
+  // Handle model selection change
+  const handleModelChange = (modelId: string) => {
+    setSelectedModel(modelId);
+    localStorage.setItem('preferred-ai-model', modelId);
+  };
 
   // Load most recent chat session from database
   const loadRecentSession = async () => {
@@ -91,6 +129,7 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
         body: JSON.stringify({
           message: input,
           session_id: sessionId,
+          model: selectedModel,  // Include selected model
           context: {
             dailyDigest,
             operations
@@ -165,6 +204,22 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
+      </div>
+
+      {/* Model Selector */}
+      <div className="bg-gray-800 border-b border-gray-700 p-3">
+        <label className="text-xs text-gray-400 block mb-1">AI Model:</label>
+        <select
+          value={selectedModel}
+          onChange={(e) => handleModelChange(e.target.value)}
+          className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+        >
+          {availableModels.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Messages */}

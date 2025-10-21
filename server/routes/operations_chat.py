@@ -13,6 +13,7 @@ from typing import Optional, List, Dict
 from datetime import datetime
 from database import get_db
 from models import ChatSession, ChatMessage as ChatMessageModel
+from services.model_provider import ModelProvider
 
 load_dotenv()
 
@@ -27,6 +28,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     context: Optional[Dict] = None
+    model: Optional[str] = "gpt-4o"  # Default to GPT-4o
 
 def get_openai_config():
     return {
@@ -63,11 +65,8 @@ Keep responses concise but complete. If you don't have specific information in t
 async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
     """
     Chat with AI assistant about daily operations - persists to PostgreSQL
+    Supports both OpenAI and Ollama models
     """
-
-    config = get_openai_config()
-    if not config["api_key"]:
-        raise HTTPException(500, "OpenAI API key not configured")
 
     # Get or create chat session
     session = None
@@ -143,38 +142,22 @@ async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
         "content": request.message
     })
 
-    # Call OpenAI
-    headers = {
-        "Authorization": f"Bearer {config['api_key']}",
-        "Content-Type": "application/json",
-    }
-
-    if config["project_id"]:
-        headers["OpenAI-Project"] = config["project_id"]
-
-    payload = {
-        "model": config["model"],
-        "messages": messages,
-        "temperature": 0.4,
-        "max_tokens": 800
-    }
-
+    # Call AI model (OpenAI or Ollama based on model parameter)
     try:
-        with httpx.Client(base_url=config["base_url"], timeout=60) as client:
-            response = client.post("/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-
-        assistant_response = data["choices"][0]["message"]["content"].strip()
-        tokens_used = data.get("usage", {}).get("total_tokens", 0)
+        assistant_response = await ModelProvider.chat_completion(
+            messages=messages,
+            model=request.model,
+            temperature=0.4,
+            max_tokens=800
+        )
 
         # Save assistant response to database
         assistant_message = ChatMessageModel(
             session_id=session.id,
             role="assistant",
             content=assistant_response,
-            model_used=config["model"],
-            tokens_used=tokens_used
+            model_used=request.model,
+            tokens_used=0  # TODO: Track tokens for Ollama too
         )
         db.add(assistant_message)
 

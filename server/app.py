@@ -15,6 +15,7 @@ from services.summarize import summarize_thread
 from services.ai_triage import summarize_thread_advanced, batch_summarize_threads
 from services.smart_assistant import smart_triage, daily_digest
 from services.state_manager import state_manager
+from services.model_provider import ModelProvider
 
 load_dotenv()
 
@@ -95,6 +96,28 @@ async def deadline_scan():
         from services.deadline_scanner import scan_deadlines
         result = scan_deadlines()
         return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# Model provider endpoints
+@app.get("/models/list")
+async def list_models():
+    """List all available AI models (OpenAI + Ollama)"""
+    try:
+        # Get Ollama models
+        ollama_models = await ModelProvider.list_ollama_models()
+
+        # Add OpenAI models
+        openai_models = [
+            {"id": "gpt-4o", "name": "GPT-4o (OpenAI)", "provider": "openai", "default": True},
+            {"id": "gpt-4o-mini", "name": "GPT-4o Mini (OpenAI)", "provider": "openai"},
+            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo (OpenAI)", "provider": "openai"},
+        ]
+
+        return {
+            "models": openai_models + ollama_models,
+            "default": "gpt-4o"
+        }
     except Exception as e:
         raise HTTPException(500, str(e))
 
