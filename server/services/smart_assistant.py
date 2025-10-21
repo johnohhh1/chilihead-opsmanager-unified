@@ -377,8 +377,11 @@ def daily_digest() -> dict:
     """
     from .gmail import get_user_threads
     from .priority_filter import load_watch_config
-    
-    current_time = datetime.now()
+    import pytz
+
+    # Use Eastern Time for all operations
+    eastern = pytz.timezone('America/New_York')
+    current_time = datetime.now(eastern)
     
     # Get today's emails from watched senders
     config = load_watch_config()
@@ -407,7 +410,7 @@ def daily_digest() -> dict:
         
         if not threads:
             return {
-                "digest": f"Good morning John! No urgent emails in the last 24 hours. You're all caught up for {current_time.strftime('%A, %B %d')}! ✅",
+                "digest": f"Good morning John! No urgent emails in the last 24 hours. You're all caught up for {current_time.strftime('%A, %B %d, %Y')}! ✅",
                 "generated_at": current_time.isoformat()
             }
         
@@ -428,7 +431,10 @@ def daily_digest() -> dict:
         
         # Generate AI digest
         prompt = f"""
-You are John's executive assistant. It's {current_time.strftime('%A, %B %d, %Y at %I:%M %p ET')}.
+You are John's executive assistant.
+
+TODAY'S DATE: {current_time.strftime('%A, %B %d, %Y')}
+CURRENT TIME: {current_time.strftime('%I:%M %p ET')}
 
 Review these {len(email_summaries)} emails from the last 24 hours and create a morning operations brief.
 
