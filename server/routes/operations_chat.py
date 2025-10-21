@@ -144,7 +144,7 @@ async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
 
     # Call AI model (OpenAI or Ollama based on model parameter)
     try:
-        assistant_response = await ModelProvider.chat_completion(
+        assistant_response = ModelProvider.chat_completion_sync(
             messages=messages,
             model=request.model,
             temperature=0.4,

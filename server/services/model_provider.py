@@ -60,6 +60,24 @@ class ModelProvider:
             return []
 
     @staticmethod
+    def chat_completion_sync(
+        messages: List[Dict],
+        model: str = "gpt-4o",
+        temperature: float = 0.7,
+        max_tokens: int = 1000
+    ) -> str:
+        """
+        SYNC Unified chat completion interface
+        Automatically routes to OpenAI or Ollama based on model name
+        """
+
+        # Determine provider based on model name
+        if model.startswith("gpt-") or model == "gpt-4o":
+            return ModelProvider._openai_completion_sync(messages, model, temperature, max_tokens)
+        else:
+            return ModelProvider._ollama_completion_sync(messages, model, temperature, max_tokens)
+
+    @staticmethod
     async def chat_completion(
         messages: List[Dict],
         model: str = "gpt-4o",
@@ -67,7 +85,7 @@ class ModelProvider:
         max_tokens: int = 1000
     ) -> str:
         """
-        Unified chat completion interface
+        ASYNC Unified chat completion interface
         Automatically routes to OpenAI or Ollama based on model name
         """
 
@@ -78,13 +96,48 @@ class ModelProvider:
             return await ModelProvider._ollama_completion(messages, model, temperature, max_tokens)
 
     @staticmethod
+    def _openai_completion_sync(
+        messages: List[Dict],
+        model: str,
+        temperature: float,
+        max_tokens: int
+    ) -> str:
+        """OpenAI completion (SYNC)"""
+        config = ModelProvider.get_openai_config()
+
+        if not config["api_key"]:
+            raise ValueError("OpenAI API key not configured")
+
+        headers = {
+            "Authorization": f"Bearer {config['api_key']}",
+            "Content-Type": "application/json",
+        }
+
+        if config["project_id"]:
+            headers["OpenAI-Project"] = config["project_id"]
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+
+        with httpx.Client(base_url=config["base_url"], timeout=60) as client:
+            response = client.post("/chat/completions", headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        return data["choices"][0]["message"]["content"].strip()
+
+    @staticmethod
     async def _openai_completion(
         messages: List[Dict],
         model: str,
         temperature: float,
         max_tokens: int
     ) -> str:
-        """OpenAI completion"""
+        """OpenAI completion (ASYNC)"""
         config = ModelProvider.get_openai_config()
 
         if not config["api_key"]:
@@ -113,13 +166,43 @@ class ModelProvider:
         return data["choices"][0]["message"]["content"].strip()
 
     @staticmethod
+    def _ollama_completion_sync(
+        messages: List[Dict],
+        model: str,
+        temperature: float,
+        max_tokens: int
+    ) -> str:
+        """Ollama completion (SYNC)"""
+        config = ModelProvider.get_ollama_config()
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens
+            }
+        }
+
+        with httpx.Client(timeout=120) as client:
+            response = client.post(
+                f"{config['base_url']}/api/chat",
+                json=payload
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        return data["message"]["content"].strip()
+
+    @staticmethod
     async def _ollama_completion(
         messages: List[Dict],
         model: str,
         temperature: float,
         max_tokens: int
     ) -> str:
-        """Ollama completion"""
+        """Ollama completion (ASYNC)"""
         config = ModelProvider.get_ollama_config()
 
         payload = {
