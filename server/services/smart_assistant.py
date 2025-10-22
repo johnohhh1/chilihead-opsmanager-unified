@@ -108,23 +108,24 @@ def extract_message_body(payload: dict) -> str:
     
     return body
 
-def smart_triage(thread_id: str) -> dict:
+def smart_triage(thread_id: str, model: str = "gpt-4o") -> dict:
     """
     Actually understand the email and provide intelligent analysis
     Not just reformatting - real comprehension
     """
-    
+    from .model_provider import ModelProvider
+
     msgs = get_thread_messages(thread_id)
     if not msgs:
         return {"analysis": "No messages found", "tasks": []}
-    
+
     # Get full thread content
     thread_data = []
     for msg in msgs[-3:]:  # Last 3 messages for context
         headers = msg.get("payload", {}).get("headers", [])
         header_dict = {h["name"].lower(): h["value"] for h in headers}
         body = extract_message_body(msg.get("payload", {}))
-        
+
         thread_data.append({
             "from": header_dict.get("from", ""),
             "to": header_dict.get("to", ""),
@@ -132,49 +133,32 @@ def smart_triage(thread_id: str) -> dict:
             "date": header_dict.get("date", ""),
             "body": body[:2000]  # Limit body length
         })
-    
+
     current_time = datetime.now().strftime('%A, %B %d, %Y at %I:%M %p ET')
-    
+
     prompt = SMART_ASSISTANT_PROMPT.format(current_time=current_time)
     prompt += "\n\nEMAIL THREAD TO ANALYZE:\n"
     prompt += json.dumps(thread_data, indent=2)
     prompt += "\n\nProvide your analysis and extracted action items in a conversational but structured way."
-    
-    config = get_openai_config()
-    if not config["api_key"]:
-        return {"analysis": "No API key configured", "tasks": []}
-    
-    headers = {
-        "Authorization": f"Bearer {config['api_key']}",
-        "Content-Type": "application/json",
-    }
-    
-    if config["project_id"]:
-        headers["OpenAI-Project"] = config["project_id"]
-    
-    payload = {
-        "model": config["model"],
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are an intelligent executive assistant. Be practical, specific, and understand context. Don't just reformat - actually comprehend what needs to be done."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        "temperature": 0.3,
-        "max_tokens": 1500
-    }
-    
+
+    messages = [
+        {
+            "role": "system",
+            "content": "You are an intelligent executive assistant. Be practical, specific, and understand context. Don't just reformat - actually comprehend what needs to be done."
+        },
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
+
     try:
-        with httpx.Client(base_url=config["base_url"], timeout=60) as client:
-            response = client.post("/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-        
-        analysis = data["choices"][0]["message"]["content"].strip()
+        analysis = ModelProvider.chat_completion_sync(
+            messages=messages,
+            model=model,
+            temperature=0.3,
+            max_tokens=1500
+        )
         
         # Extract specific tasks if mentioned
         tasks = extract_smart_tasks(analysis, thread_data)
@@ -371,13 +355,14 @@ def parse_due_date(due_text: str) -> str:
     # Default: no specific date found
     return None
 
-def daily_digest() -> dict:
+def daily_digest(model: str = "gpt-4o") -> dict:
     """
     Generate a daily digest of all important items
     Like a morning briefing from your assistant
     """
     from .gmail import get_user_threads
     from .priority_filter import load_watch_config
+    from .model_provider import ModelProvider
 
     # Use Eastern Time for all operations
     eastern = pytz.timezone('America/New_York')
@@ -456,38 +441,18 @@ Be specific, conversational, and helpful. Include details like:
 
 If there are no urgent items, say so clearly. Don't make up fake issues.
 """
-        
-        config = get_openai_config()
-        if not config["api_key"]:
-            return {
-                "digest": "⚠️ OpenAI API key not configured. Cannot generate digest.",
-                "generated_at": current_time.isoformat()
-            }
-        
-        headers = {
-            "Authorization": f"Bearer {config['api_key']}",
-            "Content-Type": "application/json",
-        }
-        
-        if config["project_id"]:
-            headers["OpenAI-Project"] = config["project_id"]
-        
-        payload = {
-            "model": config["model"],
-            "messages": [
-                {"role": "system", "content": "You are an intelligent executive assistant who understands context and priorities."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3,
-            "max_tokens": 1000
-        }
-        
-        with httpx.Client(base_url=config["base_url"], timeout=60) as client:
-            response = client.post("/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-        
-        digest_text = data["choices"][0]["message"]["content"].strip()
+
+        messages = [
+            {"role": "system", "content": "You are an intelligent executive assistant who understands context and priorities."},
+            {"role": "user", "content": prompt}
+        ]
+
+        digest_text = ModelProvider.chat_completion_sync(
+            messages=messages,
+            model=model,
+            temperature=0.3,
+            max_tokens=1000
+        )
         
         return {
             "digest": digest_text,

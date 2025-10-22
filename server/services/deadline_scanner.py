@@ -23,70 +23,44 @@ def get_openai_config():
         "org_id": os.getenv("OPENAI_ORG_ID")
     }
 
-DEADLINE_SCANNER_PROMPT = """Role: You are an ops inbox analyst for a Chili's GM. You have Gmail access. Timezone is America/Detroit. "Today" is {current_datetime} in America/Detroit.
+DEADLINE_SCANNER_PROMPT = """You are John's restaurant operations assistant. Today is {current_datetime} (Eastern Time).
 
-Objective: Search the provided Gmail threads and produce a single, clean "Checklist of New Deadlines (Allen Woods / Brinker Emails)" report exactly as specified below. If nothing is found, reply only: No new deadlines.
+Scan these emails and find ANYTHING with a deadline, due date, or time-sensitive action. Look for:
+- Schedule submissions (P5, manager schedules, etc.)
+- Reports due (labor, sales, safety, etc.)
+- Training deadlines
+- Compliance items
+- Payroll issues that need action by a certain time
+- Meeting times
+- Anything that says "by Friday," "due Oct 20," "submit by 5pm," etc.
 
-Scope analyzed:
-- Primary window: last 24 hours
-- Backstop window: last 7 days (only include items not already listed from the 24-hour window)
+For each deadline you find, create a table row with:
 
-Senders included (ANY of):
-- allen.woods@brinker.com
-- Any email that ends with @brinker.com
-- @chilis.com
-- c00605mgr@chilis.com
+| # | What needs to be done | When it's due | Calendar Entry | Email Link |
+|---|----------------------|---------------|----------------|------------|
+| 1 | Submit manager schedule for Period 5 | Friday Oct 18 at 5pm | Title: Submit P5 Manager Schedule<br>Date: 2025-10-18<br>Time: 5:00 PM America/Detroit<br>Reminder: 3 days prior | [View](gmail_link) |
 
-Keyword filter (ANY of in subject or body): schedule, due, deadline, submit, EOP, labor, report, Oracle, Fusion
-
-What to extract from each matching email:
-
-**Summary**: 1 line in plain English, including store if present (e.g., "Auburn Hills #605").
-
-**Due Date**: Parse natural phrases like "due Oct 20," "due 10/20," "by Friday 4 PM," "EOD," "COB." Convert to an absolute date/time in America/Detroit when possible. If only "EOD/COB" is given, use 5:00 PM; if only a day is given, default to 10:00 AM.
-
-**Proposed Calendar Entry**:
-- Title: "<tight actionable title>"
-- Date: <YYYY-MM-DD or Mon Mon DD YYYY>
-- Time: 10:00 AM America/Detroit
+**Format the Calendar Entry like this:**
+- Title: Short, actionable title (like "Submit P5 Schedule" or "Complete Safety Training")
+- Date: YYYY-MM-DD format
+- Time: Actual time if mentioned, otherwise 10:00 AM America/Detroit
 - Reminder: 3 days prior
 
-(Use 10:00 AM by default unless the email clearly specifies a different time. Keep titles terse and specific.)
+**After the table, add a quick summary:**
+### What's Due:
+- **Today**: [list items due today]
+- **This Week**: [list items due this week]
+- **Later**: [list items due later]
 
-**Link**: A direct Gmail permalink to the message/thread (format: https://mail.google.com/mail/u/0/#inbox/THREAD_ID)
+If there are NO deadlines found, just say "No urgent deadlines found in recent emails."
 
-De-duplication rules:
-- If multiple emails refer to the same deliverable, keep the newest, fold earlier ones into the Summary as context (e.g., "follow-up to …"), and show a single line item.
+**Be practical:**
+- If an email mentions multiple deadlines, create separate rows for each
+- Convert vague dates like "EOD" to 5:00 PM today, "tomorrow" to the actual date, etc.
+- Include the Gmail link so John can click through to read the full email
 
-Output format (exactly):
-
-Title line:
-✅ Checklist of New Deadlines (Allen Woods / Brinker Emails)
-
-Then a compact table in markdown format:
-
-| # | Summary | Due Date | Proposed Calendar Entry | Link |
-|---|---------|----------|------------------------|------|
-| 1 | ... | ... | Title: ...<br>Date: ...<br>Time: ...<br>Reminder: 3 days prior | [View](https://...) |
-
-After the table, add this section:
-
----
-**Summary of Next Due Actions:**
-
-List the next actions grouped by **Today** / **Tomorrow** / **This Week**, using short one-liners (no more than ~12 words each). Include only what appeared in the table.
-
-If no matches: Reply exactly "No new deadlines." (no extra text).
-
-Behavior notes:
-- Never invent a due date. If none can be parsed, put "—" in Due Date, and in the Proposed Calendar Entry still default to 10:00 AM with the earliest reasonable date inferred by the message (otherwise omit the entry).
-- Normalize store names (e.g., "Chili's — Auburn Hills #605") when present.
-- Keep the response tight: no explanations, no headers other than those specified, no chatter.
-
-EMAILS TO ANALYZE:
+EMAILS TO SCAN:
 {email_data}
-
-Generate the deadline checklist report now.
 """
 
 def extract_message_body(payload: dict) -> str:
@@ -109,11 +83,12 @@ def extract_message_body(payload: dict) -> str:
 
     return body
 
-def scan_deadlines() -> dict:
+def scan_deadlines(model: str = "gpt-4o") -> dict:
     """
     Run the Brinker/Allen deadline scanner
     Returns structured deadline report
     """
+    from .model_provider import ModelProvider
 
     # Get current time in Detroit timezone
     detroit_tz = pytz.timezone('America/Detroit')
@@ -171,50 +146,29 @@ def scan_deadlines() -> dict:
         # Sort by age (newest first)
         email_data.sort(key=lambda x: x.get("age_hours", 999))
 
-        # Call OpenAI with deadline scanner prompt
+        # Call AI with deadline scanner prompt
         prompt = DEADLINE_SCANNER_PROMPT.format(
             current_datetime=current_datetime,
             email_data=json.dumps(email_data, indent=2)
         )
 
-        config = get_openai_config()
-        if not config["api_key"]:
-            return {
-                "report": "⚠️ OpenAI API key not configured.",
-                "deadlines": [],
-                "generated_at": now_detroit.isoformat()
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a precise deadline scanner. Follow the format exactly. Do not add extra commentary."
+            },
+            {
+                "role": "user",
+                "content": prompt
             }
+        ]
 
-        headers = {
-            "Authorization": f"Bearer {config['api_key']}",
-            "Content-Type": "application/json",
-        }
-
-        if config["project_id"]:
-            headers["OpenAI-Project"] = config["project_id"]
-
-        payload = {
-            "model": config["model"],
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a precise deadline scanner. Follow the format exactly. Do not add extra commentary."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "temperature": 0.2,
-            "max_tokens": 2000
-        }
-
-        with httpx.Client(base_url=config["base_url"], timeout=90) as client:
-            response = client.post("/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-
-        report_text = data["choices"][0]["message"]["content"].strip()
+        report_text = ModelProvider.chat_completion_sync(
+            messages=messages,
+            model=model,
+            temperature=0.2,
+            max_tokens=2000
+        )
 
         # Parse the report to extract structured deadline data
         deadlines = parse_deadline_report(report_text)
@@ -276,7 +230,7 @@ def parse_deadline_report(report_text: str) -> list:
             "calendar_title": title_match.group(1).strip() if title_match else summary,
             "calendar_date": date_match.group(1).strip() if date_match else None,
             "calendar_time": time_match.group(1).strip() if time_match else "10:00 AM America/Detroit",
-            "link": link,
+            "gmail_link": link,  # Changed from "link" to "gmail_link" for frontend consistency
             "reminder_days": 3
         }
 

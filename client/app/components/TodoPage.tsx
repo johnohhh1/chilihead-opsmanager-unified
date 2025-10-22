@@ -5,6 +5,7 @@ import {
   CheckCircle2, Circle, Clock, AlertTriangle,
   Calendar, Trash2, RefreshCw, Filter, X, Plus, Edit2, Save
 } from 'lucide-react';
+import CalendarModal from './CalendarModal';
 
 interface TodoItem {
   id: string;
@@ -34,6 +35,8 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
   const [addingTask, setAddingTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [calendarModalOpen, setCalendarModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TodoItem | null>(null);
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -71,6 +74,51 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
     } catch (error) {
       console.error('Failed to toggle task:', error);
     }
+  };
+
+  const openCalendarModal = (task: TodoItem) => {
+    setSelectedTask(task);
+    setCalendarModalOpen(true);
+  };
+
+  const getSuggestedDateTime = (task: TodoItem) => {
+    let suggestedDate = '';
+    let suggestedTime = '10:00 AM';
+
+    if (task.due_date) {
+      const dueDate = new Date(task.due_date);
+      suggestedDate = dueDate.toISOString().split('T')[0];
+
+      // Smart time based on priority
+      if (task.priority === 'urgent') {
+        suggestedTime = '8:00 AM'; // Start of day for urgent
+      } else if (task.priority === 'high') {
+        suggestedTime = '9:00 AM';
+      } else {
+        suggestedTime = '10:00 AM';
+      }
+    } else {
+      // No due date - suggest based on priority
+      const baseDate = new Date();
+
+      if (task.priority === 'urgent') {
+        // Today
+        suggestedDate = baseDate.toISOString().split('T')[0];
+        suggestedTime = '8:00 AM';
+      } else if (task.priority === 'high') {
+        // Tomorrow
+        baseDate.setDate(baseDate.getDate() + 1);
+        suggestedDate = baseDate.toISOString().split('T')[0];
+        suggestedTime = '9:00 AM';
+      } else {
+        // Next few days
+        baseDate.setDate(baseDate.getDate() + 2);
+        suggestedDate = baseDate.toISOString().split('T')[0];
+        suggestedTime = '10:00 AM';
+      }
+    }
+
+    return { suggestedDate, suggestedTime };
   };
 
   const deleteTask = async (taskId: string) => {
@@ -378,20 +426,50 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
             )}
           </div>
 
-          <button
-            onClick={() => deleteTask(task.id)}
-            className="p-1 hover:bg-red-900/20 rounded flex-shrink-0"
-            title="Delete task"
-          >
-            <Trash2 className="h-4 w-4 text-red-400" />
-          </button>
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={() => openCalendarModal(task)}
+              className="p-1 hover:bg-blue-900/20 rounded flex-shrink-0"
+              title="Add to Google Calendar"
+            >
+              <Calendar className="h-4 w-4 text-blue-400" />
+            </button>
+            <button
+              onClick={() => deleteTask(task.id)}
+              className="p-1 hover:bg-red-900/20 rounded flex-shrink-0"
+              title="Delete task"
+            >
+              <Trash2 className="h-4 w-4 text-red-400" />
+            </button>
+          </div>
         </div>
       </div>
     );
   };
 
+  const { suggestedDate, suggestedTime } = selectedTask
+    ? getSuggestedDateTime(selectedTask)
+    : { suggestedDate: '', suggestedTime: '' };
+
   return (
     <div className="space-y-6">
+      {/* Calendar Modal */}
+      {selectedTask && (
+        <CalendarModal
+          isOpen={calendarModalOpen}
+          onClose={() => {
+            setCalendarModalOpen(false);
+            setSelectedTask(null);
+          }}
+          title={selectedTask.action}
+          suggestedDate={suggestedDate}
+          suggestedTime={suggestedTime}
+          description={`Priority: ${selectedTask.priority}\nEstimate: ${selectedTask.time_estimate || 'N/A'}`}
+          priority={selectedTask.priority as 'low' | 'medium' | 'high' | 'urgent'}
+          timeEstimate={selectedTask.time_estimate}
+          dueDate={selectedTask.due_date}
+        />
+      )}
       {/* Navigation Tabs */}
       {onNavigate && (
         <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-3">

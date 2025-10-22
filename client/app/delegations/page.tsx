@@ -27,11 +27,8 @@ interface Delegation {
   chilihead_progress: ChiliHeadProgress;
 }
 
-interface DelegationsPageProps {
-  onNavigate?: (page: 'triage' | 'todo' | 'delegations') => void;
-}
-
-export default function DelegationsPage({ onNavigate }: DelegationsPageProps = {}) {
+export default function DelegationsPage() {
+  const onNavigate = undefined;
   const router = useRouter();
   const [delegations, setDelegations] = useState<Delegation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,31 +83,7 @@ export default function DelegationsPage({ onNavigate }: DelegationsPageProps = {
 
   return (
     <div className="space-y-6">
-      {/* Navigation Tabs */}
-      {onNavigate && (
-        <div className="bg-gray-800 rounded-xl shadow-sm border border-gray-700 p-3">
-          <nav className="flex space-x-2">
-            <button
-              onClick={() => onNavigate('triage')}
-              className="px-4 py-2 rounded-lg font-medium text-sm text-gray-300 hover:bg-gray-700"
-            >
-              📧 Email Triage
-            </button>
-            <button
-              onClick={() => onNavigate('todo')}
-              className="px-4 py-2 rounded-lg font-medium text-sm text-gray-300 hover:bg-gray-700"
-            >
-              ✓ Todo List
-            </button>
-            <button
-              onClick={() => onNavigate('delegations')}
-              className="px-4 py-2 rounded-lg font-medium text-sm bg-red-500 text-white"
-            >
-              🌶️ Delegations
-            </button>
-          </nav>
-        </div>
-      )}
+      {/* Navigation Tabs - Hidden when used as standalone page */}
 
       {/* Header */}
       <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-lg shadow-lg p-6 text-white">
@@ -247,12 +220,50 @@ export default function DelegationsPage({ onNavigate }: DelegationsPageProps = {
                 </div>
 
                 {delegation.due_date && (
-                  <div className="flex items-center text-sm mb-3">
-                    <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                    <span className={overdue ? 'text-red-400 font-medium' : 'text-gray-300'}>
-                      Due: {new Date(delegation.due_date).toLocaleDateString()}
-                      {overdue && ' (Overdue!)'}
-                    </span>
+                  <div className="flex items-center justify-between text-sm mb-3">
+                    <div className="flex items-center">
+                      <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                      <span className={overdue ? 'text-red-400 font-medium' : 'text-gray-300'}>
+                        Due: {new Date(delegation.due_date).toLocaleDateString()}
+                        {overdue && ' (Overdue!)'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation(); // Prevent navigation
+                        try {
+                          const dueDate = new Date(delegation.due_date!);
+                          const calendarDate = dueDate.toISOString().split('T')[0];
+
+                          const response = await fetch('/api/backend/calendar/create-event', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              title: `Follow up: ${delegation.task_description}`,
+                              date: calendarDate,
+                              time: '10:00 AM',
+                              description: `Delegation for: ${delegation.assigned_to}\n\nStatus: ${delegation.status}\nPriority: ${delegation.priority}`,
+                              location: 'Chili\'s - Auburn Hills #605',
+                              reminder_days: 2
+                            })
+                          });
+
+                          const data = await response.json();
+                          if (data.success) {
+                            alert(`✅ Added to calendar!\n\n${delegation.task_description}\n${calendarDate}`);
+                          } else {
+                            alert(`❌ Failed: ${data.error}`);
+                          }
+                        } catch (error) {
+                          alert('❌ Failed to add to calendar');
+                        }
+                      }}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded flex items-center space-x-1"
+                      title="Add to Google Calendar"
+                    >
+                      <Calendar className="h-3 w-3" />
+                      <span>Add to Cal</span>
+                    </button>
                   </div>
                 )}
 

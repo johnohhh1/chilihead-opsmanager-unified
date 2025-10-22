@@ -5,15 +5,16 @@ import { useRouter, usePathname } from 'next/navigation';
 import TriagePage from './components/TriagePage';
 import TodoPage from './components/TodoPage';
 import DelegationsPage from './delegations/page';
+import CalendarPage from './calendar/page';
 import OperationsChat from './components/OperationsChat';
 import {
-  Inbox, CheckSquare, Users, Brain, Sparkles
+  Inbox, CheckSquare, Users, Brain, Sparkles, Calendar
 } from 'lucide-react';
 
 export default function OpsManagerDashboard() {
   const router = useRouter();
   const pathname = usePathname();
-  const [currentPage, setCurrentPage] = useState<'triage' | 'todo' | 'delegations'>('triage');
+  const [currentPage, setCurrentPage] = useState<'triage' | 'todo' | 'delegations' | 'calendar'>('triage');
   const [taskCount, setTaskCount] = useState(0);
   const [delegationCount, setDelegationCount] = useState(0);
   const [dailyDigest, setDailyDigest] = useState<string>("");
@@ -187,6 +188,18 @@ export default function OpsManagerDashboard() {
                     </span>
                   )}
                 </button>
+
+                <button
+                  onClick={() => setCurrentPage('calendar')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 ${
+                    currentPage === 'calendar'
+                      ? 'bg-red-500 text-white'
+                      : 'text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  <Calendar className="h-4 w-4" />
+                  <span>Calendar</span>
+                </button>
               </nav>
             </div>
 
@@ -206,8 +219,10 @@ export default function OpsManagerDashboard() {
           <TriagePage onAddToTodo={handleAddToTodo} onNavigate={setCurrentPage} />
         ) : currentPage === 'todo' ? (
           <TodoPage onNavigate={setCurrentPage} />
+        ) : currentPage === 'calendar' ? (
+          <CalendarPage />
         ) : (
-          <DelegationsPage onNavigate={setCurrentPage} />
+          <DelegationsPage />
         )}
       </div>
 

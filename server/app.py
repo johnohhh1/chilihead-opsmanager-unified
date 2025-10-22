@@ -11,6 +11,7 @@ from routes.delegations import router as delegations_router
 from routes.tasks import router as tasks_router  # NEW
 from routes.email_state import router as email_state_router  # NEW
 from routes.operations_chat import router as operations_chat_router  # NEW
+from routes.calendar import router as calendar_router  # NEW: Google Calendar
 from services.summarize import summarize_thread
 from services.ai_triage import summarize_thread_advanced, batch_summarize_threads
 from services.smart_assistant import smart_triage, daily_digest
@@ -33,9 +34,11 @@ app.include_router(delegations_router, prefix="")  # ChiliHead Delegations
 app.include_router(tasks_router, prefix="")  # NEW: Tasks/Todo List
 app.include_router(email_state_router, prefix="")  # NEW: Email State Tracking
 app.include_router(operations_chat_router, prefix="")  # NEW: Operations Chat
+app.include_router(calendar_router, prefix="")  # NEW: Google Calendar
 
 class SummarizeIn(BaseModel):
     thread_id: str
+    model: str = "gpt-4o"  # Default AI model
 
 @app.post("/summarize")
 async def summarize(payload: SummarizeIn):
@@ -73,7 +76,7 @@ async def batch_triage(payload: BatchTriageIn):
 async def smart_analysis(payload: SummarizeIn):
     """Smart context-aware analysis that actually understands emails"""
     try:
-        result = smart_triage(payload.thread_id)
+        result = smart_triage(payload.thread_id, model=payload.model)
         # Mark as analyzed
         state_manager.mark_analyzed(payload.thread_id)
         return result
@@ -81,20 +84,20 @@ async def smart_analysis(payload: SummarizeIn):
         raise HTTPException(500, str(e))
 
 @app.get("/daily-digest")
-async def get_daily_digest():
+async def get_daily_digest(model: str = "gpt-4o"):
     """Get daily operations brief"""
     try:
-        result = daily_digest()
+        result = daily_digest(model=model)
         return result
     except Exception as e:
         raise HTTPException(500, str(e))
 
 @app.get("/deadline-scan")
-async def deadline_scan():
+async def deadline_scan(model: str = "gpt-4o"):
     """Run Brinker/Allen deadline scanner"""
     try:
         from services.deadline_scanner import scan_deadlines
-        result = scan_deadlines()
+        result = scan_deadlines(model=model)
         return result
     except Exception as e:
         raise HTTPException(500, str(e))

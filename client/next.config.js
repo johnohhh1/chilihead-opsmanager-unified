@@ -8,6 +8,14 @@ const nextConfig = {
       },
     ]
   },
+  // Increase timeout for AI model requests (Ollama can be slow)
+  experimental: {
+    proxyTimeout: 300000, // 5 minutes
+  },
+  // Increase server-side timeout
+  serverRuntimeConfig: {
+    timeout: 300000,
+  },
 }
 
 module.exports = nextConfig

@@ -59,7 +59,35 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
   const [deadlineLoading, setDeadlineLoading] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [authUrl, setAuthUrl] = useState<string>('');
-  
+
+  // Model selection state
+  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o');
+  const [availableModels, setAvailableModels] = useState<any[]>([]);
+
+  // Load available AI models
+  const loadModels = async () => {
+    try {
+      const response = await fetch('/api/backend/models/list');
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableModels(data.models || []);
+        // Load saved model preference
+        const savedModel = localStorage.getItem('preferred-ai-model');
+        if (savedModel) {
+          setSelectedModel(savedModel);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load models:', error);
+    }
+  };
+
+  // Handle model selection change
+  const handleModelChange = (modelId: string) => {
+    setSelectedModel(modelId);
+    localStorage.setItem('preferred-ai-model', modelId);
+  };
+
   // Preferences panel state
   const [showPreferences, setShowPreferences] = useState(false);
   const [watchConfig, setWatchConfig] = useState<WatchConfig>({
@@ -245,7 +273,10 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
       const response = await fetch('/api/backend/smart-triage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ thread_id: threadId })
+        body: JSON.stringify({
+          thread_id: threadId,
+          model: selectedModel // Include selected AI model
+        })
       });
       
       const data = await response.json();
@@ -291,7 +322,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
   const fetchDigest = async () => {
     try {
       // Add timestamp to force fresh fetch (no caching)
-      const response = await fetch(`/api/backend/daily-digest?t=${Date.now()}`);
+      const response = await fetch(`/api/backend/daily-digest?t=${Date.now()}&model=${selectedModel}`);
       const data = await response.json();
       setDigest(data.digest);
       setShowDigest(true);
@@ -304,7 +335,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
   const fetchDeadlines = async () => {
     setDeadlineLoading(true);
     try {
-      const response = await fetch('/api/backend/deadline-scan');
+      const response = await fetch(`/api/backend/deadline-scan?model=${selectedModel}`);
       const data = await response.json();
       setDeadlineReport(data.report || 'No deadlines found');
       setDeadlines(data.deadlines || []);
@@ -318,9 +349,36 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
   };
 
   const addDeadlineToCalendar = async (deadline: any) => {
-    // TODO: Implement Google Calendar API integration
-    alert(`Add to Calendar:\n\nTitle: ${deadline.calendar_title}\nDate: ${deadline.calendar_date}\nTime: ${deadline.calendar_time}\n\nGoogle Calendar integration coming soon!`);
+    try {
+      const response = await fetch('/api/backend/calendar/create-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: deadline.calendar_title,
+          date: deadline.calendar_date,
+          time: deadline.calendar_time || '10:00 AM',
+          description: `${deadline.summary}\n\nEmail: ${deadline.gmail_link || ''}`,
+          location: 'Chili\'s - Auburn Hills #605',
+          reminder_days: 3
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`✅ Calendar event created!\n\n${deadline.calendar_title}\n${deadline.calendar_date} at ${deadline.calendar_time}\n\nView in Google Calendar: ${data.event_link}`);
+      } else {
+        alert(`❌ Failed to create calendar event:\n${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to create calendar event:', error);
+      alert('❌ Failed to create calendar event. Please try again.');
+    }
   };
+
+  useEffect(() => {
+    loadModels(); // Load available AI models first
+  }, []); // Run only once on mount
 
   useEffect(() => {
     const initAuth = async () => {
@@ -328,7 +386,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
       if (authenticated) {
         loadWatchConfig();
         fetchThreads();
-        fetchDigest();
+        // Don't auto-fetch digest on page load - user can click button
       }
     };
     initAuth();
@@ -790,6 +848,23 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
               <span>{hideAcknowledged ? 'Show All' : 'Hide Done'}</span>
             </button>
 
+            {/* AI Model Selector */}
+            <div className="flex items-center space-x-2">
+              <Brain className="h-4 w-4 text-gray-400" />
+              <select
+                value={selectedModel}
+                onChange={(e) => handleModelChange(e.target.value)}
+                className="bg-gray-700 text-white text-sm px-3 py-2 rounded-lg border border-gray-600 hover:bg-gray-600 font-medium min-w-[200px]"
+              >
+                {availableModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                    {model.default ? ' (Default)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
               onClick={fetchDigest}
               className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium text-sm"
@@ -987,13 +1062,64 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
                                       )}
                                     </div>
                                   </div>
-                                  <button
-                                    onClick={() => addSingleTask(task, thread.id)}
-                                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded flex items-center space-x-1 flex-shrink-0"
-                                  >
-                                    <Plus className="h-3 w-3" />
-                                    <span>Add</span>
-                                  </button>
+                                  <div className="flex items-center space-x-1 flex-shrink-0">
+                                    <button
+                                      onClick={async () => {
+                                        // Add to calendar
+                                        try {
+                                          let calendarDate = '';
+                                          let calendarTime = '10:00 AM';
+
+                                          if (task.due_date) {
+                                            // Try to parse the due date
+                                            const dueDate = new Date(task.due_date);
+                                            if (!isNaN(dueDate.getTime())) {
+                                              calendarDate = dueDate.toISOString().split('T')[0];
+                                            }
+                                          }
+
+                                          if (!calendarDate) {
+                                            const tomorrow = new Date();
+                                            tomorrow.setDate(tomorrow.getDate() + 1);
+                                            calendarDate = tomorrow.toISOString().split('T')[0];
+                                          }
+
+                                          const response = await fetch('/api/backend/calendar/create-event', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                              title: task.action,
+                                              date: calendarDate,
+                                              time: calendarTime,
+                                              description: `From: ${thread.from}\nSubject: ${thread.subject}\n\nEstimate: ${task.time_estimate || 'N/A'}`,
+                                              location: 'Chili\'s - Auburn Hills #605',
+                                              reminder_days: 1
+                                            })
+                                          });
+
+                                          const data = await response.json();
+                                          if (data.success) {
+                                            alert(`✅ Added to calendar!\n\n${task.action}\n${calendarDate} at ${calendarTime}`);
+                                          } else {
+                                            alert(`❌ Failed: ${data.error}`);
+                                          }
+                                        } catch (error) {
+                                          alert('❌ Failed to add to calendar');
+                                        }
+                                      }}
+                                      className="p-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
+                                      title="Add to Google Calendar"
+                                    >
+                                      <Calendar className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => addSingleTask(task, thread.id)}
+                                      className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded flex items-center space-x-1"
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                      <span>Add</span>
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>

@@ -31,6 +31,7 @@ def _client_config():
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/calendar.events",  # Add calendar events
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid"
@@ -77,3 +78,32 @@ def auth_callback(request: Request):
         f.write(creds.to_json())
 
     return HTMLResponse("<h3>Auth complete. You can close this tab.</h3>")
+
+@router.get("/auth/scopes")
+def check_scopes():
+    """Check what scopes are currently granted"""
+    token_path = TOKENS_DIR / "user_dev.json"
+    if not token_path.exists():
+        return {"authenticated": False, "message": "Not authenticated"}
+
+    try:
+        with open(token_path, "r") as f:
+            token_data = json.load(f)
+
+        # Get scopes from token
+        granted_scopes = token_data.get("scopes", [])
+
+        # Check which scopes we need
+        needed_scopes = SCOPES
+        missing_scopes = [s for s in needed_scopes if s not in granted_scopes]
+
+        return {
+            "authenticated": True,
+            "granted_scopes": granted_scopes,
+            "needed_scopes": needed_scopes,
+            "missing_scopes": missing_scopes,
+            "has_calendar": "https://www.googleapis.com/auth/calendar.events" in granted_scopes,
+            "needs_reauth": len(missing_scopes) > 0
+        }
+    except Exception as e:
+        return {"error": str(e)}
