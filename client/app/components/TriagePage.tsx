@@ -63,14 +63,24 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
   // Model selection state
   const [selectedModel, setSelectedModel] = useState<string>('gpt-4o');
   const [availableModels, setAvailableModels] = useState<any[]>([]);
+  const [ollamaStatus, setOllamaStatus] = useState<string>("unknown");
+  const [modelsLoading, setModelsLoading] = useState(false);
 
   // Load available AI models
   const loadModels = async () => {
+    setModelsLoading(true);
     try {
-      const response = await fetch('/api/backend/models/list');
+      const response = await fetch('/api/backend/models/list', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setAvailableModels(data.models || []);
+        setOllamaStatus(data.ollama_status || "unknown");
         // Load saved model preference
         const savedModel = localStorage.getItem('preferred-ai-model');
         if (savedModel) {
@@ -79,6 +89,9 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
       }
     } catch (error) {
       console.error('Failed to load models:', error);
+      setOllamaStatus("error");
+    } finally {
+      setModelsLoading(false);
     }
   };
 
@@ -851,18 +864,35 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
             {/* AI Model Selector */}
             <div className="flex items-center space-x-2">
               <Brain className="h-4 w-4 text-gray-400" />
-              <select
-                value={selectedModel}
-                onChange={(e) => handleModelChange(e.target.value)}
-                className="bg-gray-700 text-white text-sm px-3 py-2 rounded-lg border border-gray-600 hover:bg-gray-600 font-medium min-w-[200px]"
+              <div className="relative">
+                <select
+                  value={selectedModel}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  disabled={modelsLoading}
+                  className="bg-gray-700 text-white text-sm px-3 py-2 pr-8 rounded-lg border border-gray-600 hover:bg-gray-600 font-medium min-w-[200px] disabled:opacity-50"
+                >
+                  {availableModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                      {model.default ? ' (Default)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {ollamaStatus === "disconnected" && (
+                  <span className="absolute -bottom-5 left-0 text-xs text-yellow-400" title="Ollama offline">⚠</span>
+                )}
+                {ollamaStatus === "connected" && availableModels.filter(m => m.provider === "ollama").length > 0 && (
+                  <span className="absolute -bottom-5 left-0 text-xs text-green-400" title="Ollama connected">✓</span>
+                )}
+              </div>
+              <button
+                onClick={loadModels}
+                disabled={modelsLoading}
+                className="text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                title="Refresh model list"
               >
-                {availableModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                    {model.default ? ' (Default)' : ''}
-                  </option>
-                ))}
-              </select>
+                <RefreshCw className={`h-4 w-4 ${modelsLoading ? 'animate-spin' : ''}`} />
+              </button>
             </div>
 
             <button

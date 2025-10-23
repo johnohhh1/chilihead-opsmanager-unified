@@ -40,7 +40,11 @@ echo Ollama:   http://localhost:11434
 echo Backend:  http://localhost:8002
 echo Frontend: http://localhost:3001
 echo.
-echo Three command windows will open.
+echo Three command windows will open:
+echo   1. Ollama Server (minimized)
+echo   2. ChiliHead Backend (Python in venv)
+echo   3. ChiliHead Frontend (Next.js)
+echo.
 echo Close this window or press any key to exit.
 echo ========================================
 pause

@@ -34,11 +34,14 @@ class ModelProvider:
         }
 
     @staticmethod
-    async def list_ollama_models() -> List[Dict]:
-        """List all available Ollama models"""
+    async def list_ollama_models() -> Dict:
+        """
+        List all available Ollama models with connection status
+        Returns dict with 'models' list and 'status' string
+        """
         try:
             config = ModelProvider.get_ollama_config()
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.get(f"{config['base_url']}/api/tags")
                 response.raise_for_status()
                 data = response.json()
@@ -54,10 +57,32 @@ class ModelProvider:
                         "provider": "ollama"
                     })
 
-                return models
+                return {
+                    "models": models,
+                    "status": "connected",
+                    "message": f"Found {len(models)} Ollama models"
+                }
+        except httpx.ConnectError as e:
+            print(f"Ollama connection error (is ollama serve running?): {e}")
+            return {
+                "models": [],
+                "status": "disconnected",
+                "message": "Ollama is not running. Start with 'ollama serve'"
+            }
+        except httpx.TimeoutException as e:
+            print(f"Ollama timeout: {e}")
+            return {
+                "models": [],
+                "status": "timeout",
+                "message": "Ollama connection timed out"
+            }
         except Exception as e:
             print(f"Failed to list Ollama models: {e}")
-            return []
+            return {
+                "models": [],
+                "status": "error",
+                "message": str(e)
+            }
 
     @staticmethod
     def chat_completion_sync(

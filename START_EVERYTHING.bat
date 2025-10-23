@@ -16,7 +16,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [1/3] Starting PostgreSQL database...
+echo [1/4] Starting PostgreSQL database...
 docker-compose up -d
 if errorlevel 1 (
     echo [ERROR] Failed to start database!
@@ -24,10 +24,20 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [2/3] Waiting for database to be ready...
+echo [2/4] Waiting for database to be ready...
 timeout /t 5 /nobreak >nul
 
-echo [3/3] Starting backend and frontend...
+echo [3/4] Checking Ollama...
+where ollama >nul 2>&1
+if errorlevel 1 (
+    echo [SKIP] Ollama not installed. OpenAI models will work.
+) else (
+    echo [INFO] Starting Ollama serve...
+    start "Ollama Server" /MIN cmd /c "ollama serve"
+    timeout /t 3 /nobreak >nul
+)
+
+echo [4/4] Starting backend and frontend...
 echo.
 echo ========================================
 echo   Backend: http://localhost:8002

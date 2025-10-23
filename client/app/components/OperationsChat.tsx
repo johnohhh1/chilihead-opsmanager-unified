@@ -28,6 +28,8 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>("gpt-4o");
   const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
+  const [ollamaStatus, setOllamaStatus] = useState<string>("unknown");
+  const [modelsLoading, setModelsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom
@@ -49,11 +51,20 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
 
   // Load available AI models
   const loadModels = async () => {
+    setModelsLoading(true);
     try {
-      const response = await fetch('/api/backend/models/list');
+      const response = await fetch('/api/backend/models/list', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
-        setAvailableModels(data.models);
+        setAvailableModels(data.models || []);
+        setOllamaStatus(data.ollama_status || "unknown");
+
         // Load saved model preference from localStorage
         const savedModel = localStorage.getItem('preferred-ai-model');
         if (savedModel) {
@@ -62,6 +73,9 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
       }
     } catch (error) {
       console.error('Failed to load models:', error);
+      setOllamaStatus("error");
+    } finally {
+      setModelsLoading(false);
     }
   };
 
@@ -208,11 +222,29 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
 
       {/* Model Selector */}
       <div className="bg-gray-800 border-b border-gray-700 p-3">
-        <label className="text-xs text-gray-400 block mb-1">AI Model:</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs text-gray-400">AI Model:</label>
+          <button
+            onClick={loadModels}
+            disabled={modelsLoading}
+            className="text-xs text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+            title="Refresh model list"
+          >
+            <svg
+              className={`w-3 h-3 ${modelsLoading ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
         <select
           value={selectedModel}
           onChange={(e) => handleModelChange(e.target.value)}
           className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+          disabled={modelsLoading}
         >
           {availableModels.map((model) => (
             <option key={model.id} value={model.id}>
@@ -220,6 +252,12 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
             </option>
           ))}
         </select>
+        {ollamaStatus === "disconnected" && (
+          <p className="text-xs text-yellow-400 mt-1">⚠ Ollama offline - run: ollama serve</p>
+        )}
+        {ollamaStatus === "connected" && availableModels.filter(m => m.provider === "ollama").length > 0 && (
+          <p className="text-xs text-green-400 mt-1">✓ Ollama connected</p>
+        )}
       </div>
 
       {/* Messages */}

@@ -12,6 +12,7 @@ from routes.tasks import router as tasks_router  # NEW
 from routes.email_state import router as email_state_router  # NEW
 from routes.operations_chat import router as operations_chat_router  # NEW
 from routes.calendar import router as calendar_router  # NEW: Google Calendar
+from routes.models import router as models_router  # NEW: Models listing
 from services.summarize import summarize_thread
 from services.ai_triage import summarize_thread_advanced, batch_summarize_threads
 from services.smart_assistant import smart_triage, daily_digest
@@ -35,6 +36,7 @@ app.include_router(tasks_router, prefix="")  # NEW: Tasks/Todo List
 app.include_router(email_state_router, prefix="")  # NEW: Email State Tracking
 app.include_router(operations_chat_router, prefix="")  # NEW: Operations Chat
 app.include_router(calendar_router, prefix="")  # NEW: Google Calendar
+app.include_router(models_router, prefix="")  # NEW: Models listing
 
 class SummarizeIn(BaseModel):
     thread_id: str
@@ -107,8 +109,16 @@ async def deadline_scan(model: str = "gpt-4o"):
 async def list_models():
     """List all available AI models (OpenAI + Ollama)"""
     try:
-        # Get Ollama models
-        ollama_models = await ModelProvider.list_ollama_models()
+        # Get Ollama models with connection status
+        ollama_result = await ModelProvider.list_ollama_models()
+
+        # Check if ollama_result is a dict with status (new format) or list (old format)
+        if isinstance(ollama_result, dict):
+            ollama_models = ollama_result.get("models", [])
+            ollama_status = ollama_result.get("status", "unknown")
+        else:
+            ollama_models = ollama_result
+            ollama_status = "connected" if ollama_models else "unavailable"
 
         # Add OpenAI models
         openai_models = [
@@ -117,10 +127,19 @@ async def list_models():
             {"id": "gpt-4-turbo", "name": "GPT-4 Turbo (OpenAI)", "provider": "openai"},
         ]
 
-        return {
-            "models": openai_models + ollama_models,
-            "default": "gpt-4o"
-        }
+        response = JSONResponse(
+            content={
+                "models": openai_models + ollama_models,
+                "default": "gpt-4o",
+                "ollama_status": ollama_status
+            },
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+        return response
     except Exception as e:
         raise HTTPException(500, str(e))
 
