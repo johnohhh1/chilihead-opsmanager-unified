@@ -735,7 +735,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
 
       {/* Deadline Scanner Results */}
       {showDeadlines && deadlineReport && (
-        <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-xl shadow-lg p-6 border border-orange-700">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl shadow-lg p-6 border border-slate-700">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h3 className="text-xl font-bold mb-3 flex items-center">
@@ -905,7 +905,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
             <button
               onClick={fetchDeadlines}
               disabled={deadlineLoading}
-              className="px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium text-sm flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 font-medium text-sm flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-600"
             >
               <Calendar className="h-4 w-4" />
               <span>{deadlineLoading ? 'Scanning...' : 'Deadline Scan'}</span>

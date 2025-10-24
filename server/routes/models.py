@@ -38,7 +38,7 @@ async def list_models():
                 },
                 {
                     "id": "gpt-4o-mini",
-                    "name": "GPT-4 Mini",
+                    "name": "GPT-4o Mini",
                     "provider": "openai",
                     "description": "Fast and efficient for simple tasks"
                 },

@@ -1,0 +1,3 @@
+@echo off
+echo Starting Ollama with default settings...
+ollama serve

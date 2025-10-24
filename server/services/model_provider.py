@@ -95,11 +95,26 @@ class ModelProvider:
         SYNC Unified chat completion interface
         Automatically routes to OpenAI or Ollama based on model name
         """
+        
+        print(f"[ModelProvider] Routing model '{model}' to provider...")
 
         # Determine provider based on model name
-        if model.startswith("gpt-") or model == "gpt-4o":
+        # OpenAI models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, etc.
+        # BUT NOT: gpt-oss, gpt-neox, etc. (these are local Ollama models)
+        openai_models = ["gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
+        
+        # Check if it's an actual OpenAI model
+        is_openai = any(model.startswith(prefix) for prefix in openai_models)
+        
+        # Special case: gpt-oss and gpt-neox are Ollama models
+        if "gpt-oss" in model or "gpt-neox" in model:
+            is_openai = False
+        
+        if is_openai:
+            print(f"[ModelProvider] Sending '{model}' to OpenAI")
             return ModelProvider._openai_completion_sync(messages, model, temperature, max_tokens)
         else:
+            print(f"[ModelProvider] Sending '{model}' to Ollama")
             return ModelProvider._ollama_completion_sync(messages, model, temperature, max_tokens)
 
     @staticmethod
@@ -113,11 +128,26 @@ class ModelProvider:
         ASYNC Unified chat completion interface
         Automatically routes to OpenAI or Ollama based on model name
         """
+        
+        print(f"[ModelProvider] Async routing model '{model}' to provider...")
 
         # Determine provider based on model name
-        if model.startswith("gpt-") or model == "gpt-4o":
+        # OpenAI models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, etc.
+        # BUT NOT: gpt-oss, gpt-neox, etc. (these are local Ollama models)
+        openai_models = ["gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
+        
+        # Check if it's an actual OpenAI model
+        is_openai = any(model.startswith(prefix) for prefix in openai_models)
+        
+        # Special case: gpt-oss and gpt-neox are Ollama models
+        if "gpt-oss" in model or "gpt-neox" in model:
+            is_openai = False
+        
+        if is_openai:
+            print(f"[ModelProvider] Async sending '{model}' to OpenAI")
             return await ModelProvider._openai_completion(messages, model, temperature, max_tokens)
         else:
+            print(f"[ModelProvider] Async sending '{model}' to Ollama")
             return await ModelProvider._ollama_completion(messages, model, temperature, max_tokens)
 
     @staticmethod
@@ -199,6 +229,30 @@ class ModelProvider:
     ) -> str:
         """Ollama completion (SYNC)"""
         config = ModelProvider.get_ollama_config()
+        
+        # Make a copy of messages to avoid modifying the original
+        messages = messages.copy()
+
+        # For OSS models that output thinking, add a system message to suppress it
+        if "oss" in model.lower() or "gpt-oss" in model.lower():
+            # Check if there's already a system message
+            has_system = any(msg.get("role") == "system" for msg in messages)
+            
+            if has_system:
+                # Append to existing system message
+                for i, msg in enumerate(messages):
+                    if msg.get("role") == "system":
+                        messages[i] = {
+                            **msg,
+                            "content": msg["content"] + "\n\nIMPORTANT: Provide ONLY the final answer without showing your thinking process, internal monologue, or reasoning steps. Be direct and concise."
+                        }
+                        break
+            else:
+                # Add new system message at the beginning
+                messages.insert(0, {
+                    "role": "system", 
+                    "content": "IMPORTANT: Provide ONLY the final answer without showing your thinking process, internal monologue, or reasoning steps. Be direct and concise."
+                })
 
         payload = {
             "model": model,
@@ -229,6 +283,24 @@ class ModelProvider:
     ) -> str:
         """Ollama completion (ASYNC)"""
         config = ModelProvider.get_ollama_config()
+
+        # For OSS models that output thinking, add a system message to suppress it
+        if "oss" in model.lower() or "gpt-oss" in model.lower():
+            # Check if there's already a system message
+            has_system = any(msg.get("role") == "system" for msg in messages)
+            
+            if has_system:
+                # Append to existing system message
+                for msg in messages:
+                    if msg.get("role") == "system":
+                        msg["content"] = msg["content"] + "\n\nIMPORTANT: Provide ONLY the final answer without showing your thinking process, internal monologue, or reasoning steps. Be direct and concise."
+                        break
+            else:
+                # Add new system message at the beginning
+                messages = [
+                    {"role": "system", "content": "IMPORTANT: Provide ONLY the final answer without showing your thinking process, internal monologue, or reasoning steps. Be direct and concise."},
+                    *messages
+                ]
 
         payload = {
             "model": model,
