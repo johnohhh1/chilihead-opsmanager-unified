@@ -69,3 +69,15 @@ backup/
 # Windows specific
 nul
 desktop.ini
+# Large model files 
+*.gguf 
+*.bin 
+*.safetensors 
+# Modelfiles 
+*.modelfile 
+# Batch scripts for local use 
+OLLAMA_START.bat 
+PERMANENT_OLLAMA_FIX.bat 
+RESET_OLLAMA.bat 
+WORKING_START.bat 
+start_ollama*.bat 
