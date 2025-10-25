@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   CheckCircle2, Circle, Clock, AlertTriangle,
-  Calendar, Trash2, RefreshCw, Filter, X, Plus, Edit2, Save
+  Calendar, Trash2, RefreshCw, Filter, X, Plus, Edit2, Save, CheckSquare
 } from 'lucide-react';
 import CalendarModal from './CalendarModal';
 
@@ -18,6 +18,7 @@ interface TodoItem {
   created_at: string;
   completed_at?: string;
   category?: 'urgent-important' | 'important-not-urgent' | 'urgent-not-important' | 'neither';
+  google_task_id?: string;
 }
 
 interface TodoPageProps {
@@ -37,6 +38,7 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
   const [editingText, setEditingText] = useState('');
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TodoItem | null>(null);
+  const [syncingTaskId, setSyncingTaskId] = useState<string | null>(null);
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -63,11 +65,10 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task_id: taskId })
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        // Update task in state directly instead of refetching
-        setTasks(prev => prev.map(t => 
+        setTasks(prev => prev.map(t =>
           t.id === taskId ? data.task : t
         ));
       }
@@ -128,11 +129,11 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task_id: taskId })
       });
-      
+
       if (response.ok) {
         // Remove task from state directly
         setTasks(prev => prev.filter(t => t.id !== taskId));
-        
+
         const toast = document.createElement('div');
         toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
         toast.textContent = '✓ Task deleted';
@@ -157,7 +158,6 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
 
       if (response.ok) {
         const data = await response.json();
-        // Update task in state directly
         setTasks(prev => prev.map(t =>
           t.id === taskId ? data.task : t
         ));
@@ -243,6 +243,48 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
   const cancelEdit = () => {
     setEditingTaskId(null);
     setEditingText('');
+  };
+
+  const syncToGoogleTasks = async (taskId: string) => {
+    setSyncingTaskId(taskId);
+    try {
+      const response = await fetch(`/api/backend/state/tasks/${taskId}/sync-to-google-tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Update task in state with google_task_id
+        setTasks(prev => prev.map(t =>
+          t.id === taskId ? { ...t, google_task_id: data.google_task_id } : t
+        ));
+
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+        toast.textContent = '✓ Task synced to Google Tasks';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+      } else {
+        // Handle error
+        const errorMsg = data.error || 'Failed to sync task';
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+        toast.textContent = `✗ ${errorMsg}`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+      }
+    } catch (error) {
+      console.error('Failed to sync task to Google Tasks:', error);
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      toast.textContent = '✗ Failed to sync task';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    } finally {
+      setSyncingTaskId(null);
+    }
   };
 
   const autoCategory = (task: TodoItem): TodoItem['category'] => {
@@ -427,6 +469,29 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
           </div>
 
           <div className="flex items-center space-x-1">
+            {/* Google Tasks Sync Button */}
+            {task.google_task_id ? (
+              <button
+                className="p-1 rounded flex-shrink-0 cursor-default"
+                title="Synced to Google Tasks"
+                disabled
+              >
+                <CheckSquare className="h-4 w-4 text-green-500" />
+              </button>
+            ) : (
+              <button
+                onClick={() => syncToGoogleTasks(task.id)}
+                disabled={syncingTaskId === task.id || task.completed}
+                className="p-1 hover:bg-blue-900/20 rounded flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Sync to Google Tasks"
+              >
+                {syncingTaskId === task.id ? (
+                  <RefreshCw className="h-4 w-4 text-blue-400 animate-spin" />
+                ) : (
+                  <CheckSquare className="h-4 w-4 text-blue-400" />
+                )}
+              </button>
+            )}
             <button
               onClick={() => openCalendarModal(task)}
               className="p-1 hover:bg-blue-900/20 rounded flex-shrink-0"
@@ -563,6 +628,17 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center space-x-4">
             <h2 className="text-lg font-bold text-white">Todo List</h2>
+
+            <a
+              href="https://tasks.google.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center space-x-2"
+              title="Open Google Tasks"
+            >
+              <CheckSquare className="h-4 w-4" />
+              <span>Open Google Tasks</span>
+            </a>
 
             <div className="flex items-center space-x-3 text-sm">
               <span className="text-gray-300">{activeTasks.length} active</span>

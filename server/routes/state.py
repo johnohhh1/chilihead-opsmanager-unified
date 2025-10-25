@@ -138,13 +138,13 @@ async def delete_task(request: Request):
         # Log the raw body for debugging
         body = await request.body()
         print(f"Delete task - Raw body: {body.decode()}")
-        
+
         try:
             data = json.loads(body)
             print(f"Delete task - Parsed data: {data}")
         except:
             raise HTTPException(400, "Invalid JSON")
-        
+
         req = DeleteTaskRequest(**data)
         success = state_manager.delete_task(req.task_id)
         if not success:
@@ -154,4 +154,63 @@ async def delete_task(request: Request):
         raise
     except Exception as e:
         print(f"Delete task error: {str(e)}")
+        raise HTTPException(500, str(e))
+
+@router.post("/tasks/{task_id}/sync-to-google-tasks")
+async def sync_task_to_google_tasks(task_id: str):
+    """Sync a task from state manager to Google Tasks"""
+    try:
+        from services.google_tasks import create_google_task
+
+        # Get task from state manager
+        task = state_manager.get_task(task_id)
+        if not task:
+            raise HTTPException(404, f"Task {task_id} not found")
+
+        # Check if already synced
+        if task.get('google_task_id'):
+            return {
+                "success": False,
+                "error": "Task is already synced to Google Tasks",
+                "google_task_id": task['google_task_id']
+            }
+
+        # Prepare task data for Google Tasks
+        description = task.get('description', '')
+        if task.get('priority'):
+            priority_text = f"Priority: {task['priority'].upper()}"
+            description = f"{priority_text}\n\n{description}" if description else priority_text
+
+        # Create Google Task
+        result = create_google_task(
+            title=task['action'],
+            description=description,
+            due_date=task.get('due_date'),
+            priority=task.get('priority', 'normal')
+        )
+
+        if not result.get('success'):
+            # Check if it needs re-authentication
+            error_message = result.get('error', 'Failed to create Google Task')
+            if result.get('needs_reauth') or 'permission' in error_message.lower() or 'authentication' in error_message.lower():
+                raise HTTPException(401, error_message)
+            raise HTTPException(500, error_message)
+
+        # Update task in state manager with Google Task ID
+        updated_task = state_manager.update_task(task_id, {'google_task_id': result['task_id']})
+
+        return {
+            "success": True,
+            "task": updated_task,
+            "google_task_id": result['task_id'],
+            "message": "Task synced to Google Tasks successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Check if it's an authentication error
+        error_str = str(e).lower()
+        if "not authenticated" in error_str or "invalid credentials" in error_str:
+            raise HTTPException(401, "Google authentication required. Please re-authenticate with Google to enable Tasks sync.")
         raise HTTPException(500, str(e))

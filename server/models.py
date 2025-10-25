@@ -44,6 +44,7 @@ class Task(Base):
     source_id = Column(String(255))  # email_id or delegation_id if applicable
     completed_at = Column(DateTime)
     gcal_event_id = Column(String(255))  # Google Calendar event ID
+    google_task_id = Column(String(255))  # Google Tasks ID
     eisenhower_quadrant = Column(String(20))  # 'urgent_important', 'not_urgent_important', etc.
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

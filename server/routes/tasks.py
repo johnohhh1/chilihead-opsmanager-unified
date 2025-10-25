@@ -5,6 +5,7 @@ from datetime import datetime, date
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Task as TaskModel
+from services.google_tasks import create_google_task
 import uuid
 
 router = APIRouter()
@@ -39,6 +40,7 @@ def task_to_dict(task: TaskModel):
         "source_id": task.source_id,
         "completed_at": task.completed_at.isoformat() if task.completed_at else None,
         "gcal_event_id": task.gcal_event_id,
+        "google_task_id": task.google_task_id,
         "eisenhower_quadrant": task.eisenhower_quadrant,
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
@@ -229,7 +231,7 @@ async def get_task_stats(db: Session = Depends(get_db)):
         todo = db.query(TaskModel).filter(TaskModel.status == 'todo').count()
         in_progress = db.query(TaskModel).filter(TaskModel.status == 'in_progress').count()
         completed = db.query(TaskModel).filter(TaskModel.status == 'completed').count()
-        
+
         # Count overdue tasks
         today = date.today()
         overdue = db.query(TaskModel).filter(
@@ -237,7 +239,7 @@ async def get_task_stats(db: Session = Depends(get_db)):
             TaskModel.status != 'cancelled',
             TaskModel.due_date < today
         ).count()
-        
+
         return {
             "total": total,
             "todo": todo,
@@ -246,4 +248,61 @@ async def get_task_stats(db: Session = Depends(get_db)):
             "overdue": overdue
         }
     except Exception as e:
+        raise HTTPException(500, str(e))
+
+@router.post("/tasks/{task_id}/sync-to-google-tasks")
+async def sync_task_to_google_tasks(task_id: str, db: Session = Depends(get_db)):
+    """Sync a task to Google Tasks"""
+    try:
+        # Get the task from database
+        task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+
+        if not task:
+            raise HTTPException(404, f"Task {task_id} not found")
+
+        # Check if already synced
+        if task.google_task_id:
+            return {
+                "success": False,
+                "error": "Task is already synced to Google Tasks",
+                "google_task_id": task.google_task_id
+            }
+
+        # Prepare task data
+        description = task.description or ""
+        if task.priority:
+            description = f"Priority: {task.priority.upper()}\n\n{description}"
+
+        # Create Google Task
+        result = create_google_task(
+            title=task.title,
+            description=description,
+            due_date=task.due_date.isoformat() if task.due_date else None,
+            priority=task.priority or "normal"
+        )
+
+        if not result.get('success'):
+            raise HTTPException(500, result.get('error', 'Failed to create Google Task'))
+
+        # Update task with Google Task ID
+        task.google_task_id = result['task_id']
+        task.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(task)
+
+        return {
+            "success": True,
+            "task": task_to_dict(task),
+            "google_task_id": result['task_id'],
+            "message": "Task synced to Google Tasks successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        # Check if it's an authentication error
+        if "not authenticated" in str(e).lower() or "invalid credentials" in str(e).lower():
+            raise HTTPException(401, "Google authentication required. Please re-authenticate with Google to enable Tasks sync.")
         raise HTTPException(500, str(e))
