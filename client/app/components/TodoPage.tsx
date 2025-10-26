@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   CheckCircle2, Circle, Clock, AlertTriangle,
-  Calendar, Trash2, RefreshCw, Filter, X, Plus, Edit2, Save, CheckSquare
+  Calendar, Trash2, RefreshCw, Filter, X, Plus, Edit2, Save, CheckSquare, Users
 } from 'lucide-react';
 import CalendarModal from './CalendarModal';
 
@@ -39,6 +39,8 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TodoItem | null>(null);
   const [syncingTaskId, setSyncingTaskId] = useState<string | null>(null);
+  const [pushingTaskId, setPushingTaskId] = useState<string | null>(null);
+  const [syncingFromTeam, setSyncingFromTeam] = useState(false);
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -287,6 +289,82 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
     }
   };
 
+  const pushToTeamBoard = async (taskId: string) => {
+    setPushingTaskId(taskId);
+    try {
+      const response = await fetch(`/api/backend/state/tasks/${taskId}/push-to-team`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+        toast.textContent = '✓ Task pushed to team board';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+      } else {
+        // Handle error
+        const errorMsg = data.error || 'Failed to push task';
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+        toast.textContent = `✗ ${errorMsg}`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+      }
+    } catch (error) {
+      console.error('Failed to push task to team board:', error);
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      toast.textContent = '✗ Failed to push task';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    } finally {
+      setPushingTaskId(null);
+    }
+  };
+
+  const syncFromTeamBoard = async () => {
+    setSyncingFromTeam(true);
+    try {
+      const response = await fetch('/api/backend/state/tasks/sync-from-team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Refresh tasks to show updated status
+        await fetchTasks();
+
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+        toast.textContent = `✓ Synced ${data.updated_count} task update(s)`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      } else {
+        const errorMsg = data.error || 'Failed to sync from team board';
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+        toast.textContent = `✗ ${errorMsg}`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+      }
+    } catch (error) {
+      console.error('Failed to sync from team board:', error);
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      toast.textContent = '✗ Failed to sync from team';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    } finally {
+      setSyncingFromTeam(false);
+    }
+  };
+
   const autoCategory = (task: TodoItem): TodoItem['category'] => {
     if (task.category) return task.category;
     
@@ -469,6 +547,20 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
           </div>
 
           <div className="flex items-center space-x-1">
+            {/* Push to Team Board Button */}
+            <button
+              onClick={() => pushToTeamBoard(task.id)}
+              disabled={pushingTaskId === task.id || task.completed}
+              className="p-1 hover:bg-purple-900/20 rounded flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Push to Team Board"
+            >
+              {pushingTaskId === task.id ? (
+                <RefreshCw className="h-4 w-4 text-purple-400 animate-spin" />
+              ) : (
+                <Users className="h-4 w-4 text-purple-400" />
+              )}
+            </button>
+
             {/* Google Tasks Sync Button */}
             {task.google_task_id ? (
               <button
@@ -639,6 +731,20 @@ export default function TodoPage({ onNavigate }: TodoPageProps = {}) {
               <CheckSquare className="h-4 w-4" />
               <span>Open Google Tasks</span>
             </a>
+
+            <button
+              onClick={syncFromTeamBoard}
+              disabled={syncingFromTeam}
+              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white text-sm font-medium rounded-lg transition-colors flex items-center space-x-2"
+              title="Sync status updates from team board"
+            >
+              {syncingFromTeam ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              <span>Sync from Team</span>
+            </button>
 
             <div className="flex items-center space-x-3 text-sm">
               <span className="text-gray-300">{activeTasks.length} active</span>
