@@ -6,13 +6,16 @@ interface Manager {
   id: string;
   name: string;
   phone: string;
-  twilio_configured?: boolean;
+  carrier?: string;
+  sms_email?: string;
 }
 
-interface TwilioStatus {
+interface SMSStatus {
   configured: boolean;
-  from_number: string | null;
+  method: string;
+  service: string;
   manager_count: number;
+  note?: string;
 }
 
 export default function SMSPage() {
@@ -24,11 +27,11 @@ export default function SMSPage() {
   const [isSending, setIsSending] = useState(false);
   const [sendResults, setSendResults] = useState<any>(null);
   const [error, setError] = useState('');
-  const [twilioStatus, setTwilioStatus] = useState<TwilioStatus | null>(null);
+  const [smsStatus, setSmsStatus] = useState<SMSStatus | null>(null);
 
   useEffect(() => {
     loadManagers();
-    loadTwilioStatus();
+    loadSMSStatus();
   }, []);
 
   const loadManagers = async () => {
@@ -44,13 +47,13 @@ export default function SMSPage() {
     }
   };
 
-  const loadTwilioStatus = async () => {
+  const loadSMSStatus = async () => {
     try {
       const res = await fetch('/api/backend/api/sms/status');
       const data = await res.json();
-      setTwilioStatus(data);
+      setSmsStatus(data);
     } catch (err) {
-      console.error('Failed to load Twilio status:', err);
+      console.error('Failed to load SMS status:', err);
     }
   };
 
@@ -151,24 +154,22 @@ export default function SMSPage() {
         <h1 className="text-3xl font-bold mb-2 text-white">📱 Text Managers</h1>
         <p className="text-gray-400 mb-4">Send SMS messages to your management team</p>
 
-        {/* Twilio Status */}
-        {twilioStatus && !twilioStatus.configured && (
+        {/* SMS Status */}
+        {smsStatus && !smsStatus.configured && (
           <div className="bg-yellow-900/30 border border-yellow-700 text-yellow-300 px-4 py-3 rounded mb-6">
-            <div className="font-semibold mb-2">⚠️ Twilio Not Configured</div>
+            <div className="font-semibold mb-2">⚠️ Gmail Not Authenticated</div>
             <p className="text-sm">
-              To enable SMS, add these to your server/.env file:
+              Please authenticate with Gmail to send SMS messages.
             </p>
-            <code className="block bg-gray-900 p-2 mt-2 rounded text-xs text-green-400">
-              TWILIO_ACCOUNT_SID=your_sid<br/>
-              TWILIO_AUTH_TOKEN=your_token<br/>
-              TWILIO_PHONE_NUMBER=+1234567890
-            </code>
           </div>
         )}
 
-        {twilioStatus && twilioStatus.configured && (
+        {smsStatus && smsStatus.configured && (
           <div className="bg-green-900/30 border border-green-700 text-green-300 px-4 py-3 rounded mb-6">
-            ✅ Twilio configured - sending from {twilioStatus.from_number}
+            <div className="flex items-center justify-between">
+              <span>✅ {smsStatus.method} via {smsStatus.service}</span>
+              <span className="text-xs text-green-400">{smsStatus.note}</span>
+            </div>
           </div>
         )}
 
@@ -279,6 +280,11 @@ export default function SMSPage() {
                   <div className="flex-1">
                     <div className="font-medium text-white">{manager.name}</div>
                     <div className="text-sm text-gray-400">{manager.phone}</div>
+                    {manager.carrier && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        📡 {manager.carrier}
+                      </div>
+                    )}
                   </div>
                 </label>
               ))}
@@ -289,15 +295,15 @@ export default function SMSPage() {
         {/* Send Button */}
         <button
           onClick={handleSendMessage}
-          disabled={isSending || !message.trim() || selectedManagers.length === 0 || (twilioStatus && !twilioStatus.configured)}
+          disabled={isSending || !message.trim() || selectedManagers.length === 0 || (smsStatus && !smsStatus.configured)}
           className="w-full bg-red-600 text-white px-6 py-4 rounded-lg hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors text-lg font-semibold"
         >
           {isSending ? 'Sending...' : `📱 Send to ${selectedManagers.length} Manager(s)`}
         </button>
 
-        {twilioStatus && !twilioStatus.configured && (
+        {smsStatus && !smsStatus.configured && (
           <p className="text-center text-yellow-400 text-sm mt-2">
-            Configure Twilio credentials to send messages
+            Gmail authentication required to send messages
           </p>
         )}
 
