@@ -1,0 +1,8 @@
+Add SMS integration and clean up model files
+
+- Add SMS integration with Twilio support
+- Add SMS page component and routing
+- Remove unused gemma-3n-local and mistral-recovery modelfiles
+- Update smart assistant service
+- Update requirements with SMS dependencies
+- Configure SMS endpoints and services

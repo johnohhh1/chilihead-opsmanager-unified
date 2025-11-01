@@ -451,7 +451,7 @@ If there are no urgent items, say so clearly. Don't make up fake issues.
             messages=messages,
             model=model,
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=3000  # Increased from 1000 for more detailed output
         )
         
         return {
