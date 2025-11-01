@@ -24,6 +24,7 @@ class Delegation(BaseModel):
     taskDescription: str
     assignedTo: str
     assignedToEmail: Optional[str] = None  # NEW: For email notifications
+    assignedToPhone: Optional[str] = None  # NEW: For SMS notifications
     dueDate: Optional[str] = None
     followUpDate: Optional[str] = None
     priority: str = "medium"  # low, medium, high
@@ -34,6 +35,7 @@ class DelegationUpdate(BaseModel):
     taskDescription: Optional[str] = None
     assignedTo: Optional[str] = None
     assignedToEmail: Optional[str] = None
+    assignedToPhone: Optional[str] = None  # NEW: For SMS notifications
     dueDate: Optional[str] = None
     followUpDate: Optional[str] = None
     priority: Optional[str] = None
@@ -47,6 +49,7 @@ def delegation_to_dict(delegation: DelegationModel):
         "task_description": delegation.task_description,
         "assigned_to": delegation.assigned_to,
         "assigned_to_email": delegation.assigned_to_email,
+        "assigned_to_phone": getattr(delegation, 'assigned_to_phone', None),
         "due_date": delegation.due_date.isoformat() if delegation.due_date else None,
         "follow_up_date": delegation.follow_up_date.isoformat() if delegation.follow_up_date else None,
         "priority": delegation.priority,
@@ -110,6 +113,7 @@ async def create_delegation(delegation: Delegation, db: Session = Depends(get_db
             task_description=delegation.taskDescription,
             assigned_to=delegation.assignedTo,
             assigned_to_email=delegation.assignedToEmail,
+            assigned_to_phone=delegation.assignedToPhone,
             due_date=due_date_obj,
             follow_up_date=follow_up_date_obj,
             priority=delegation.priority,
@@ -145,6 +149,8 @@ async def update_delegation(delegation_id: str, updates: DelegationUpdate, db: S
             delegation.assigned_to = updates.assignedTo
         if updates.assignedToEmail is not None:
             delegation.assigned_to_email = updates.assignedToEmail
+        if updates.assignedToPhone is not None:
+            delegation.assigned_to_phone = updates.assignedToPhone
         if updates.dueDate is not None:
             delegation.due_date = datetime.fromisoformat(updates.dueDate.replace('Z', '')).date()
         if updates.followUpDate is not None:

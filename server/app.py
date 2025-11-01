@@ -13,6 +13,7 @@ from routes.email_state import router as email_state_router  # NEW
 from routes.operations_chat import router as operations_chat_router  # NEW
 from routes.calendar import router as calendar_router  # NEW: Google Calendar
 from routes.models import router as models_router  # NEW: Models listing
+from routes.twilio_sms import router as twilio_router  # NEW: Twilio SMS
 from services.summarize import summarize_thread
 from services.ai_triage import summarize_thread_advanced, batch_summarize_threads
 from services.smart_assistant import smart_triage, daily_digest
@@ -37,6 +38,7 @@ app.include_router(email_state_router, prefix="")  # NEW: Email State Tracking
 app.include_router(operations_chat_router, prefix="")  # NEW: Operations Chat
 app.include_router(calendar_router, prefix="")  # NEW: Google Calendar
 app.include_router(models_router, prefix="")  # NEW: Models listing
+app.include_router(twilio_router, prefix="")  # NEW: Twilio SMS
 
 class SummarizeIn(BaseModel):
     thread_id: str

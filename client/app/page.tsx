@@ -7,15 +7,16 @@ import TodoPage from './components/TodoPage';
 import DelegationsPage from './delegations/page';
 import CalendarPage from './calendar/page';
 import TeamBoardPage from './components/TeamBoardPage';
+import TwilioPage from './components/TwilioPage';
 import OperationsChat from './components/OperationsChat';
 import {
-  Inbox, CheckSquare, Users, Brain, Sparkles, Calendar, UsersRound
+  Inbox, CheckSquare, Users, Brain, Sparkles, Calendar, UsersRound, MessageSquare
 } from 'lucide-react';
 
 export default function OpsManagerDashboard() {
   const router = useRouter();
   const pathname = usePathname();
-  const [currentPage, setCurrentPage] = useState<'triage' | 'todo' | 'delegations' | 'calendar' | 'team-board'>('triage');
+  const [currentPage, setCurrentPage] = useState<'triage' | 'todo' | 'delegations' | 'calendar' | 'team-board' | 'sms'>('triage');
   const [taskCount, setTaskCount] = useState(0);
   const [delegationCount, setDelegationCount] = useState(0);
   const [dailyDigest, setDailyDigest] = useState<string>("");
@@ -216,6 +217,18 @@ export default function OpsManagerDashboard() {
                     Live
                   </span>
                 </button>
+
+                <button
+                  onClick={() => setCurrentPage('sms')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 ${
+                    currentPage === 'sms'
+                      ? 'bg-red-500 text-white'
+                      : 'text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  <span>SMS</span>
+                </button>
               </nav>
             </div>
 
@@ -239,6 +252,8 @@ export default function OpsManagerDashboard() {
           <CalendarPage />
         ) : currentPage === 'team-board' ? (
           <TeamBoardPage onNavigate={setCurrentPage} />
+        ) : currentPage === 'sms' ? (
+          <TwilioPage onNavigate={setCurrentPage} />
         ) : (
           <DelegationsPage />
         )}

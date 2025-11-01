@@ -58,11 +58,12 @@ class Task(Base):
 class Delegation(Base):
     """ChiliHead 5-Pillar delegation system"""
     __tablename__ = 'delegations'
-    
+
     id = Column(String(36), primary_key=True, default=generate_uuid)
     task_description = Column(Text, nullable=False)
     assigned_to = Column(String(255))
     assigned_to_email = Column(String(255))  # For email notifications
+    assigned_to_phone = Column(String(20))  # For SMS notifications
     due_date = Column(Date)
     follow_up_date = Column(Date)
     priority = Column(String(20))
