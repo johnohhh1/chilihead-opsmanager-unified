@@ -13,11 +13,21 @@ class SMSService:
         self.account_sid = os.getenv("TWILIO_ACCOUNT_SID")
         self.auth_token = os.getenv("TWILIO_AUTH_TOKEN")
         self.from_number = os.getenv("TWILIO_PHONE_NUMBER")
-        
-        if not all([self.account_sid, self.auth_token, self.from_number]):
-            raise ValueError("Missing Twilio credentials in environment variables")
-        
-        self.client = Client(self.account_sid, self.auth_token)
+
+        # Check if Twilio is configured
+        self.is_configured = all([self.account_sid, self.auth_token, self.from_number])
+
+        if self.is_configured:
+            try:
+                self.client = Client(self.account_sid, self.auth_token)
+                logger.info("Twilio SMS service initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize Twilio client: {str(e)}")
+                self.is_configured = False
+                self.client = None
+        else:
+            logger.warning("Twilio credentials not configured. SMS features will be disabled.")
+            self.client = None
         
         # Manager contacts
         self.managers = {
@@ -41,13 +51,20 @@ class SMSService:
     
     def send_sms(self, to_number: str, message: str) -> Dict:
         """Send an SMS to a single number"""
+        if not self.is_configured:
+            return {
+                "success": False,
+                "error": "Twilio is not configured. Please set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in your .env file.",
+                "to": to_number
+            }
+
         try:
             message_obj = self.client.messages.create(
                 body=message,
                 from_=self.from_number,
                 to=to_number
             )
-            
+
             logger.info(f"SMS sent successfully to {to_number}. SID: {message_obj.sid}")
             return {
                 "success": True,
@@ -92,10 +109,19 @@ class SMSService:
             {
                 "id": key,
                 "name": value["name"],
-                "phone": value["phone"]
+                "phone": value["phone"],
+                "twilio_configured": self.is_configured
             }
             for key, value in self.managers.items()
         ]
+
+    def get_status(self) -> Dict:
+        """Get Twilio service status"""
+        return {
+            "configured": self.is_configured,
+            "from_number": self.from_number if self.is_configured else None,
+            "manager_count": len(self.managers)
+        }
 
 
 # Singleton instance
