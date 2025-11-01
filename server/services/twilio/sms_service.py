@@ -4,8 +4,6 @@ Uses your existing Gmail integration - no extra APIs needed!
 """
 import logging
 from typing import List, Dict
-from services.gmail import get_service
-from email.mime.text import MIMEText
 import base64
 
 logger = logging.getLogger(__name__)
@@ -41,25 +39,17 @@ class SMSService:
             }
         }
 
-        # Check if Gmail is available
-        try:
-            get_service()
-            self.is_configured = True
-            logger.info("Gmail SMS service initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize Gmail service: {str(e)}")
-            self.is_configured = False
+        # Check if Gmail is available (lazy check - will verify on first send)
+        self.is_configured = True  # Assume configured, will check on first use
+        logger.info("Gmail SMS service initialized")
 
     def send_email_sms(self, to_email: str, message: str, manager_name: str) -> Dict:
         """Send SMS via email-to-SMS gateway"""
-        if not self.is_configured:
-            return {
-                "success": False,
-                "error": "Gmail not configured. Please authenticate with Gmail.",
-                "to": to_email
-            }
-
         try:
+            # Import Gmail here to avoid startup issues
+            from services.gmail import get_service
+            from email.mime.text import MIMEText
+
             service = get_service()
 
             # Create email message (plain text only for SMS gateways)
@@ -82,6 +72,13 @@ class SMSService:
                 "message_id": send_result['id'],
                 "to": to_email,
                 "manager_name": manager_name
+            }
+        except ImportError as e:
+            logger.error(f"Gmail libraries not available: {str(e)}")
+            return {
+                "success": False,
+                "error": "Gmail service not available. Please install google-api-python-client.",
+                "to": to_email
             }
         except Exception as e:
             logger.error(f"Failed to send SMS to {to_email}: {str(e)}")
