@@ -101,7 +101,7 @@ class ModelProvider:
         # Determine provider based on model name
         # OpenAI models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, etc.
         # BUT NOT: gpt-oss, gpt-neox, etc. (these are local Ollama models)
-        openai_models = ["gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
+        openai_models = ["gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o1-preview", "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
         
         # Check if it's an actual OpenAI model
         is_openai = any(model.startswith(prefix) for prefix in openai_models)
@@ -134,7 +134,7 @@ class ModelProvider:
         # Determine provider based on model name
         # OpenAI models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, etc.
         # BUT NOT: gpt-oss, gpt-neox, etc. (these are local Ollama models)
-        openai_models = ["gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
+        openai_models = ["gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o1-preview", "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
         
         # Check if it's an actual OpenAI model
         is_openai = any(model.startswith(prefix) for prefix in openai_models)
