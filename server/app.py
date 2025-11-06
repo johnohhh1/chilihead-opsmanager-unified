@@ -106,44 +106,7 @@ async def deadline_scan(model: str = "gpt-4o"):
     except Exception as e:
         raise HTTPException(500, str(e))
 
-# Model provider endpoints
-@app.get("/models/list")
-async def list_models():
-    """List all available AI models (OpenAI + Ollama)"""
-    try:
-        # Get Ollama models with connection status
-        ollama_result = await ModelProvider.list_ollama_models()
-
-        # Check if ollama_result is a dict with status (new format) or list (old format)
-        if isinstance(ollama_result, dict):
-            ollama_models = ollama_result.get("models", [])
-            ollama_status = ollama_result.get("status", "unknown")
-        else:
-            ollama_models = ollama_result
-            ollama_status = "connected" if ollama_models else "unavailable"
-
-        # Add OpenAI models
-        openai_models = [
-            {"id": "gpt-4o", "name": "GPT-4o (OpenAI)", "provider": "openai", "default": True},
-            {"id": "gpt-4o-mini", "name": "GPT-4o Mini (OpenAI)", "provider": "openai"},
-            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo (OpenAI)", "provider": "openai"},
-        ]
-
-        response = JSONResponse(
-            content={
-                "models": openai_models + ollama_models,
-                "default": "gpt-4o",
-                "ollama_status": ollama_status
-            },
-            headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-                "Pragma": "no-cache",
-                "Expires": "0"
-            }
-        )
-        return response
-    except Exception as e:
-        raise HTTPException(500, str(e))
+# Model provider endpoints are handled by the models router
 
 # Database health check
 @app.get("/db/health")
