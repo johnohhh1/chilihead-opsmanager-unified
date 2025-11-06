@@ -31,10 +31,40 @@ async def list_models():
         if os.getenv("OPENAI_API_KEY"):
             models_response["models"].extend([
                 {
+                    "id": "gpt-5",
+                    "name": "GPT-5",
+                    "provider": "openai",
+                    "description": "OpenAI's latest flagship model - released August 7, 2025"
+                },
+                {
+                    "id": "gpt-5-mini",
+                    "name": "GPT-5 Mini",
+                    "provider": "openai",
+                    "description": "Balanced speed and cost version of GPT-5"
+                },
+                {
+                    "id": "gpt-5-nano",
+                    "name": "GPT-5 Nano",
+                    "provider": "openai",
+                    "description": "Lightweight, cost-effective GPT-5"
+                },
+                {
+                    "id": "o1",
+                    "name": "o1",
+                    "provider": "openai",
+                    "description": "OpenAI's advanced reasoning model"
+                },
+                {
+                    "id": "o1-preview",
+                    "name": "o1-preview",
+                    "provider": "openai",
+                    "description": "Preview of o1 reasoning capabilities"
+                },
+                {
                     "id": "gpt-4o",
                     "name": "GPT-4 Optimized",
                     "provider": "openai",
-                    "description": "Most capable model, best for complex tasks"
+                    "description": "Most capable GPT-4 model, best for complex tasks"
                 },
                 {
                     "id": "gpt-4o-mini",
