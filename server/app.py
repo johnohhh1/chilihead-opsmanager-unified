@@ -79,13 +79,99 @@ async def batch_triage(payload: BatchTriageIn):
         raise HTTPException(500, str(e))
 
 @app.post("/smart-triage")
-async def smart_analysis(payload: SummarizeIn, db: Session = Depends(get_db)):
-    """Smart context-aware analysis that actually understands emails - with agent memory!"""
+async def smart_analysis(
+    payload: SummarizeIn,
+    force_refresh: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Smart context-aware analysis with caching
+    - Checks cache first (unless force_refresh=True)
+    - Uses user-selected model from dropdown
+    - Stores analysis for future use
+    """
     try:
-        result = smart_triage(payload.thread_id, model=payload.model)
+        from services.email_sync import EmailSyncService
+
+        # Check cache unless user wants fresh analysis
+        if not force_refresh:
+            cached = EmailSyncService.get_cached_analysis(db, payload.thread_id)
+            if cached:
+                print(f"[Cache Hit] Returning cached analysis for {payload.thread_id} (model: {cached.model_used})")
+                return {
+                    **cached.analysis_json,
+                    "cached": True,
+                    "analyzed_at": cached.analyzed_at.isoformat(),
+                    "model_used": cached.model_used,
+                    "trust_score": cached.trust_score,
+                    "model_tier": cached.model_tier
+                }
+
+        # No cache or forced refresh - run fresh analysis
+        print(f"[Cache Miss] Running fresh analysis with {payload.model}")
+        result = smart_triage(payload.thread_id, model=payload.model, db=db)
+
+        # Cache the result (smart_triage should handle this internally)
         # Mark as analyzed
         state_manager.mark_analyzed(payload.thread_id)
-        return result
+
+        return {**result, "cached": False}
+
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+class ReanalysisIn(BaseModel):
+    thread_id: str
+    model: str
+    reason: str = "user_requested"
+
+@app.post("/reanalyze-email")
+async def reanalyze_email(payload: ReanalysisIn, db: Session = Depends(get_db)):
+    """Force re-analysis of an email with a different/better model"""
+    try:
+        from services.email_sync import EmailSyncService
+
+        # Flag for reanalysis
+        EmailSyncService.flag_for_reanalysis(db, payload.thread_id, payload.reason)
+
+        # Run fresh analysis with chosen model
+        result = smart_triage(payload.thread_id, model=payload.model, db=db)
+
+        return {
+            **result,
+            "reanalyzed": True,
+            "previous_model": None  # Could fetch from previous_analysis if needed
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+class FeedbackIn(BaseModel):
+    thread_id: str
+    feedback: str  # 'accurate', 'missed_details', 'hallucinated', 'wrong_priority'
+
+@app.post("/analysis-feedback")
+async def submit_analysis_feedback(payload: FeedbackIn, db: Session = Depends(get_db)):
+    """Submit feedback on analysis quality (updates trust scores)"""
+    try:
+        from services.email_sync import EmailSyncService
+
+        result = EmailSyncService.submit_feedback(db, payload.thread_id, payload.feedback)
+
+        return {
+            "thread_id": payload.thread_id,
+            "feedback_recorded": True,
+            "new_trust_score": result.trust_score if result else None,
+            "needs_reanalysis": result.needs_reanalysis if result else False
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.get("/cache-stats")
+async def get_cache_stats(db: Session = Depends(get_db)):
+    """Get email cache statistics"""
+    try:
+        from services.email_sync import EmailSyncService
+        return EmailSyncService.get_cache_stats(db)
     except Exception as e:
         raise HTTPException(500, str(e))
 

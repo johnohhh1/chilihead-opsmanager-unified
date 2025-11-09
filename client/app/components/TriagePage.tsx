@@ -1033,14 +1033,70 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
                   {isExpanded && analysis && (
                     <div className="mt-6 pt-6 border-t border-gray-700">
                       <div className="bg-gray-700 rounded-xl p-6 border border-gray-600">
-                        <div className="flex items-center mb-4">
-                          <div className="p-2 bg-red-600 rounded-lg mr-3">
-                            <Brain className="h-5 w-5 text-white" />
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center">
+                            <div className="p-2 bg-red-600 rounded-lg mr-3">
+                              <Brain className="h-5 w-5 text-white" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-white">AI Assistant Analysis</h4>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <p className="text-xs text-gray-300">Understanding context, not just keywords</p>
+                                {analysis.cached && (
+                                  <span className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded">
+                                    CACHED
+                                  </span>
+                                )}
+                                {analysis.model_used && (
+                                  <span className="text-xs text-gray-400">
+                                    {analysis.model_used}
+                                  </span>
+                                )}
+                                {analysis.model_tier && (
+                                  <span className={`px-2 py-0.5 text-xs rounded ${
+                                    analysis.model_tier === 'trusted' ? 'bg-green-600 text-white' :
+                                    analysis.model_tier === 'experimental' ? 'bg-yellow-600 text-white' :
+                                    'bg-red-600 text-white'
+                                  }`}>
+                                    {analysis.model_tier.toUpperCase()}
+                                  </span>
+                                )}
+                                {analysis.trust_score !== undefined && (
+                                  <span className="text-xs text-gray-400">
+                                    Trust: {analysis.trust_score}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-bold text-white">AI Assistant Analysis</h4>
-                            <p className="text-xs text-gray-300">Understanding context, not just keywords</p>
-                          </div>
+                          {analysis.cached && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch('/api/backend/reanalyze-email', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      thread_id: thread.id,
+                                      model: selectedModel,
+                                      reason: 'user_requested'
+                                    })
+                                  });
+                                  const freshAnalysis = await response.json();
+                                  setAnalyses(prev => new Map(prev).set(thread.id, freshAnalysis));
+                                  alert('✅ Analysis refreshed with ' + selectedModel);
+                                } catch (error) {
+                                  console.error('Reanalysis failed:', error);
+                                  alert('❌ Failed to reanalyze');
+                                }
+                              }}
+                              className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium rounded flex items-center space-x-1"
+                              title="Re-analyze with current model"
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              <span>Re-analyze</span>
+                            </button>
+                          )}
                         </div>
 
                         <div className="prose prose-sm max-w-none prose-invert">
@@ -1048,6 +1104,61 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {analysis.analysis || 'No analysis available'}
                             </ReactMarkdown>
+                          </div>
+                        </div>
+
+                        {/* Analysis Feedback */}
+                        <div className="mt-4 pt-4 border-t border-gray-600">
+                          <p className="text-xs text-gray-400 mb-2">Was this analysis accurate?</p>
+                          <div className="flex space-x-2">
+                            {[
+                              { label: '✅ Accurate', value: 'accurate', color: 'green' },
+                              { label: '⚠️ Missed Details', value: 'missed_details', color: 'yellow' },
+                              { label: '🚨 Hallucinated', value: 'hallucinated', color: 'red' },
+                              { label: '📊 Wrong Priority', value: 'wrong_priority', color: 'orange' }
+                            ].map(feedback => (
+                              <button
+                                key={feedback.value}
+                                onClick={async () => {
+                                  try {
+                                    await fetch('/api/backend/analysis-feedback', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        thread_id: thread.id,
+                                        feedback: feedback.value
+                                      })
+                                    });
+                                    alert(`Feedback recorded: ${feedback.label}`);
+
+                                    // If hallucinated, auto-trigger reanalysis
+                                    if (feedback.value === 'hallucinated') {
+                                      const response = await fetch('/api/backend/reanalyze-email', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          thread_id: thread.id,
+                                          model: selectedModel,
+                                          reason: 'model_hallucinated'
+                                        })
+                                      });
+                                      const freshAnalysis = await response.json();
+                                      setAnalyses(prev => new Map(prev).set(thread.id, freshAnalysis));
+                                    }
+                                  } catch (error) {
+                                    console.error('Feedback failed:', error);
+                                  }
+                                }}
+                                className={`px-3 py-1 text-xs font-medium rounded ${
+                                  feedback.color === 'green' ? 'bg-green-600 hover:bg-green-700' :
+                                  feedback.color === 'yellow' ? 'bg-yellow-600 hover:bg-yellow-700' :
+                                  feedback.color === 'red' ? 'bg-red-600 hover:bg-red-700' :
+                                  'bg-orange-600 hover:bg-orange-700'
+                                } text-white`}
+                              >
+                                {feedback.label}
+                              </button>
+                            ))}
                           </div>
                         </div>
 
