@@ -1,0 +1,131 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   GPT-5 FINAL FIX - TEMPERATURE ISSUE                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+🎯 THE REAL ISSUE
+────────────────────────────────────────────────────────────────────────────────
+
+GPT-5 ONLY supports temperature=1 (the default).
+Setting temperature to any other value (like 0.7) causes a 400 error.
+
+Error from OpenAI:
+{
+  "error": {
+    "message": "Unsupported value: 'temperature' does not support 0.7 with this model. Only the default (1) value is supported.",
+    "type": "invalid_request_error",
+    "param": "temperature",
+    "code": "unsupported_value"
+  }
+}
+
+✅ THE FIX
+────────────────────────────────────────────────────────────────────────────────
+
+For GPT-5 models, we now OMIT the temperature parameter entirely.
+This lets OpenAI use the default value (1).
+
+BEFORE (BROKEN):
+{
+  "model": "gpt-5",
+  "messages": [...],
+  "temperature": 0.7,  ❌ NOT ALLOWED!
+  "max_completion_tokens": 1000
+}
+
+AFTER (WORKING):
+{
+  "model": "gpt-5",
+  "messages": [...],
+  // temperature omitted - uses default (1)
+  "max_completion_tokens": 1000
+}
+
+📊 GPT-5 vs GPT-4 DIFFERENCES
+────────────────────────────────────────────────────────────────────────────────
+
+Parameter              GPT-4                    GPT-5
+─────────────────────────────────────────────────────────────────────────────
+Endpoint               /chat/completions        /chat/completions
+Messages format        messages: [...]          messages: [...]
+Token limit param      max_tokens              max_completion_tokens
+Temperature            Any value (0-2)          Only 1 (omit parameter)
+Top_p                  Supported                Unknown (test needed)
+Frequency penalty      Supported                Unknown (test needed)
+Presence penalty       Supported                Unknown (test needed)
+
+🧪 TESTING
+────────────────────────────────────────────────────────────────────────────────
+
+Run the test script:
+  cd C:\Users\John\Desktop\chilihead-opsmanager-unified\server
+  python test_gpt5.py
+
+Expected output:
+  ✅ GPT-5 (Full) - SUCCESS!
+  ✅ GPT-5 Mini - SUCCESS!
+  ✅ GPT-5 Nano - SUCCESS!
+  ✅ GPT-4o - SUCCESS!
+
+📝 UPDATED CODE
+────────────────────────────────────────────────────────────────────────────────
+
+File: server/services/model_provider.py
+
+def _openai_completion_sync(...):
+    payload = {
+        "model": model,
+        "messages": messages,
+    }
+    
+    # GPT-5 has different requirements
+    if model.startswith("gpt-5"):
+        payload["max_completion_tokens"] = max_tokens
+        # Temperature omitted - GPT-5 only supports default (1)
+    else:
+        payload["max_tokens"] = max_tokens
+        payload["temperature"] = temperature
+
+⚠️ IMPORTANT NOTES
+────────────────────────────────────────────────────────────────────────────────
+
+1. Temperature control is LIMITED with GPT-5
+   - You cannot control randomness/creativity
+   - Always uses temperature=1
+
+2. This may affect your use cases:
+   - Deterministic outputs → May need different approach
+   - Creative tasks → Already at max creativity
+   - Factual tasks → No way to reduce temperature
+
+3. Alternative approaches for deterministic outputs:
+   - Use prompt engineering ("Be precise and factual")
+   - Use GPT-4o if you need temperature control
+   - Consider using reasoning_effort parameter in Responses API
+
+🚀 NEXT STEPS
+────────────────────────────────────────────────────────────────────────────────
+
+1. Test the fix:
+   python test_gpt5.py
+
+2. Restart your server:
+   python run_server.py
+
+3. Try GPT-5 in your UI
+
+4. Monitor behavior:
+   - Check if temperature=1 affects your outputs
+   - Compare GPT-5 vs GPT-4o responses
+   - Adjust prompts if needed for consistency
+
+📚 WHAT WE LEARNED
+────────────────────────────────────────────────────────────────────────────────
+
+✓ GPT-5 uses /chat/completions (same as GPT-4)
+✓ GPT-5 uses max_completion_tokens instead of max_tokens
+✓ GPT-5 ONLY supports temperature=1 (no customization)
+✓ Better error logging helps debug API issues faster
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  GPT-5 should work now! Test with: python test_gpt5.py                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝

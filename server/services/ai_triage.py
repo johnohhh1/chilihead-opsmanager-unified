@@ -1,5 +1,7 @@
 """
-Enhanced AI-powered email summarization following the Ops Email Triage prompt
+Enhanced AI-powered email summarization with image analysis support
+Includes Aubs (Auburn Hills Assistant) persona
+Now records to centralized agent memory for coordination
 """
 
 import os
@@ -9,6 +11,9 @@ from .gmail import get_thread_messages
 import json
 from datetime import datetime, timedelta
 import re
+import base64
+from sqlalchemy.orm import Session
+from typing import Optional
 
 # Load environment variables
 load_dotenv()
@@ -18,14 +23,50 @@ def get_openai_config():
     return {
         "api_key": os.getenv("OPENAI_API_KEY"),
         "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-        "model": "gpt-4o",  # UPGRADED to GPT-4 for better understanding
+        "model": "gpt-4o",  # GPT-4o supports vision
         "project_id": os.getenv("OPENAI_PROJECT_ID"),
         "org_id": os.getenv("OPENAI_ORG_ID")
     }
 
-# The ACTUAL prompt from your instructions
-OPS_TRIAGE_PROMPT = """
-You are John's operations email triage assistant for Chili's Auburn Hills #605.
+# The AUBS PERSONA - Auburn Hills Assistant
+AUBS_PERSONA = """
+You are AUBS (Auburn Hills Assistant) - John's operations AI for Chili's #605.
+
+PERSONALITY:
+- Direct, no-nonsense, like a trusted GM who's seen it all
+- Midwest-friendly but gets straight to the point
+- Uses restaurant lingo naturally (86'd, in the weeds, BOH, FOH)
+- Calls out problems clearly but offers solutions
+- Has your back but won't sugarcoat issues
+
+SPEECH PATTERNS:
+- "Here's the deal..." when getting to the point
+- "Heads up..." for warnings
+- "Real talk..." when being blunt
+- "You're in the weeds on..." when overwhelmed
+- "Let's knock out..." for action items
+
+PRIORITIES:
+1. Guest safety & experience (health dept, quality issues)
+2. Team member wellbeing (payroll, scheduling, harassment)
+3. Business continuity (coverage, equipment, supplies)
+4. Corporate compliance (reports, deadlines, audits)
+5. Everything else
+
+COMMUNICATION STYLE:
+✓ "Hannah's pay card is dead - she hasn't been paid in 48 hours. Call payroll NOW."
+✗ "Please follow up regarding employee compensation issue."
+
+✓ "Blake called off for tonight's dinner rush (5-10pm). Sarah and Mike are your best bets."
+✗ "Coverage is needed for the evening shift."
+
+✓ "P5 schedule is due Friday 5pm. You're gonna need 30 minutes. Don't leave it till last minute."
+✗ "Please submit the P5 manager schedule by the deadline."
+"""
+
+# The ACTUAL prompt from your instructions with AUBS persona
+OPS_TRIAGE_PROMPT = f"""
+{AUBS_PERSONA}
 
 CRITICAL CONTEXT:
 - Location: Orchard Lake, MI (America/Detroit timezone)
@@ -36,6 +77,13 @@ SCOPE & ANALYSIS WINDOWS:
 1. HotSchedules/911 (last 12 hours): Coverage issues, call-offs, no-shows
 2. Brinker/Leadership (last 24 hours): Deadlines, reports, schedule submissions
 3. Vendors/Alerts (last 24 hours): Securitas, Cintas, Oracle, Fourth
+4. RAP Mobile/Tableau Reports: Analyze dashboard images for KPI trends, issues, and opportunities
+
+**IMPORTANT: If you see images (especially from RAP Mobile/Tableau):**
+- Analyze charts, tables, and KPIs carefully
+- Call out concerning trends (sales drops, labor spikes, waste increases)
+- Identify opportunities (high performers, efficiency gains)
+- Convert visual data into actionable insights
 
 EXTRACTION REQUIREMENTS:
 
@@ -52,6 +100,13 @@ For Deadlines/Deliverables:
 - SUBMISSION METHOD (where/how to submit)
 - TIME ESTIMATE (how long this will take)
 
+For Dashboard/Report Analysis (RAP Mobile, Tableau, etc.):
+- KEY METRICS: What numbers stand out (good or bad)
+- TRENDS: Week-over-week, day-over-day changes
+- RED FLAGS: Problem areas needing immediate attention
+- OPPORTUNITIES: Areas performing well or opportunities to improve
+- CONTEXT: Compare to goals, benchmarks, or historical performance
+
 For Action Items:
 - SPECIFIC ACTION (not vague - what exactly must John do)
 - CONTEXT (why this matters, impact if not done)
@@ -62,65 +117,148 @@ OUTPUT FORMAT:
 
 Provide a comprehensive analysis with:
 
-1. EXECUTIVE SUMMARY (2-3 sentences max)
+1. EXECUTIVE SUMMARY (2-3 sentences max, in AUBS voice)
    - Most critical item requiring immediate attention
    - Total actionable items found
 
 2. 🚨 911/EMERGENCY ITEMS
    - Detailed breakdown per incident
    - Specific coverage gaps
-   - Recommended actions
+   - Recommended actions (AUBS style)
 
-3. 📅 DEADLINES & SUBMISSIONS
+3. 📊 DASHBOARD INSIGHTS (if images present)
+   - Key metrics and trends from visual data
+   - Performance against targets
+   - Red flags and opportunities
+   - Specific recommendations based on numbers
+
+4. 📅 DEADLINES & SUBMISSIONS
    - Table format with columns: Item | Due Date | Time Needed | Status
    - Calendar-ready entries with reminders
 
-4. ✓ ACTION ITEMS
+5. ✓ ACTION ITEMS (prioritized, AUBS voice)
    - Prioritized list with time estimates
    - Clear next steps for each
+   - "Real talk" on consequences if ignored
 
-5. 📊 OPERATIONAL INSIGHTS
+6. 📊 OPERATIONAL INSIGHTS
    - Patterns detected (frequent call-offs, recurring issues)
    - Recommendations for prevention
+   - AUBS-style reality check
 
-6. 🔗 QUICK LINKS & REFERENCES
+7. 🔗 QUICK LINKS & REFERENCES
    - Important thread IDs
    - Key contacts mentioned
+   - Dashboard/report links
 
-Remember: Be specific, actionable, and time-aware. Convert all relative dates to absolute dates in ET.
+Remember: Channel AUBS - be specific, actionable, time-aware, and real. Convert all relative dates to absolute dates in ET.
 """
 
-def summarize_thread_advanced(thread_id: str) -> dict:
+def extract_attachments_with_images(payload: dict) -> tuple:
     """
-    Advanced summarization using the full Ops Triage prompt
-    Returns structured data for both display and todo list creation
+    Extract both text body AND images from email payload
+    Returns: (body_text, image_data_list)
     """
+    body = ""
+    images = []
     
+    def process_part(part):
+        nonlocal body, images
+        
+        mime_type = part.get("mimeType", "")
+        
+        # Handle text
+        if mime_type == "text/plain":
+            data = part.get("body", {}).get("data", "")
+            if data:
+                body += base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+        
+        # Handle images (JPEG, PNG, GIF, WebP)
+        elif mime_type.startswith("image/"):
+            attachment_id = part.get("body", {}).get("attachmentId")
+            data = part.get("body", {}).get("data")
+            
+            if data:  # Inline image
+                images.append({
+                    "mime_type": mime_type,
+                    "data": data,  # Already base64
+                    "filename": part.get("filename", "image"),
+                    "size": part.get("body", {}).get("size", 0)
+                })
+            elif attachment_id:  # Attached image (would need separate API call)
+                images.append({
+                    "mime_type": mime_type,
+                    "attachment_id": attachment_id,
+                    "filename": part.get("filename", "image"),
+                    "size": part.get("body", {}).get("size", 0)
+                })
+        
+        # Recursive for multipart
+        if "parts" in part:
+            for subpart in part["parts"]:
+                process_part(subpart)
+    
+    if "parts" in payload:
+        for part in payload["parts"]:
+            process_part(part)
+    else:
+        # Single part message
+        if payload.get("body", {}).get("data"):
+            body = base64.urlsafe_b64decode(payload["body"]["data"]).decode('utf-8', errors='ignore')
+    
+    return body, images
+
+def summarize_thread_advanced(thread_id: str, use_vision: bool = True, db: Optional[Session] = None) -> dict:
+    """
+    Advanced summarization using AUBS persona and vision analysis
+    Returns structured data for both display and todo list creation
+    Now records to centralized agent memory!
+
+    Args:
+        thread_id: Gmail thread ID
+        use_vision: Whether to analyze images (default True for RAP Mobile emails)
+        db: Database session for recording to agent memory (optional)
+    """
+
     # Get all messages in thread
     msgs = get_thread_messages(thread_id)
     
     if not msgs:
         return {
             "summary": "No messages found in thread",
-            "structured_data": None
+            "structured_data": None,
+            "has_images": False
         }
     
-    # Extract full email content
+    # Extract full email content WITH images
     email_content = []
+    all_images = []
+    
     for msg in msgs:
         headers = msg.get("payload", {}).get("headers", [])
         header_dict = {h["name"].lower(): h["value"] for h in headers}
         
-        # Extract body
-        body = extract_message_body(msg.get("payload", {}))
+        # Extract body and images
+        body, images = extract_attachments_with_images(msg.get("payload", {}))
         
         email_content.append({
             "from": header_dict.get("from", ""),
             "to": header_dict.get("to", ""),
             "date": header_dict.get("date", ""),
             "subject": header_dict.get("subject", ""),
-            "body": body
+            "body": body,
+            "image_count": len(images)
         })
+        
+        all_images.extend(images)
+    
+    # Check if this is a RAP Mobile or dashboard email
+    is_dashboard_email = any(
+        "rap mobile" in email.get("subject", "").lower() or
+        "tableau" in email.get("subject", "").lower() or
+        "dashboard" in email.get("subject", "").lower()
+        for email in email_content
+    )
     
     # Build context for AI
     thread_context = json.dumps(email_content, indent=2)
@@ -130,28 +268,60 @@ def summarize_thread_advanced(thread_id: str) -> dict:
     time_context = f"""
 Current Time: {current_time.strftime('%Y-%m-%d %H:%M:%S ET')}
 Day of Week: {current_time.strftime('%A')}
-    """
+"""
     
-    # Build the full prompt
-    full_prompt = f"""{OPS_TRIAGE_PROMPT}
+    # Build messages for GPT-4o Vision
+    messages = [
+        {
+            "role": "system",
+            "content": "You are AUBS - Auburn Hills Assistant. Direct, helpful, restaurant-savvy. Analyze text AND images."
+        }
+    ]
+    
+    # Build user message with text and images
+    user_content = [
+        {
+            "type": "text",
+            "text": f"""{OPS_TRIAGE_PROMPT}
 
 {time_context}
 
 THREAD TO ANALYZE:
 {thread_context}
 
+{"📊 IMAGES ATTACHED: Analyze the dashboard/report images carefully for KPIs, trends, and actionable insights." if all_images else ""}
+
 Provide both:
-1. A detailed human-readable summary following the format above
+1. A detailed human-readable summary following the format above (use AUBS voice)
 2. A JSON structure with extracted tasks for the todo system
 """
-
-    # Call OpenAI with the full prompt
+        }
+    ]
+    
+    # Add images if present and vision is enabled
+    if use_vision and all_images:
+        for img in all_images[:5]:  # Limit to 5 images to stay within token limits
+            if img.get("data"):  # Only inline images (no attachment_id fetching yet)
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{img['mime_type']};base64,{img['data']}"
+                    }
+                })
+    
+    messages.append({
+        "role": "user",
+        "content": user_content
+    })
+    
+    # Call OpenAI with vision support
     config = get_openai_config()
     
     if not config["api_key"]:
         return {
             "summary": "[No API Key] Would analyze: " + thread_context[:500],
-            "structured_data": None
+            "structured_data": None,
+            "has_images": len(all_images) > 0
         }
     
     headers = {
@@ -163,29 +333,20 @@ Provide both:
         headers["OpenAI-Project"] = config["project_id"]
     
     payload = {
-        "model": config["model"],
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are an expert operations manager assistant. Provide detailed, actionable analysis."
-            },
-            {
-                "role": "user",
-                "content": full_prompt
-            }
-        ],
-        "temperature": 0.3,  # Lower temperature for more consistent extraction
-        "max_tokens": 2000   # Increased for detailed summaries
+        "model": "gpt-4o",  # GPT-4o supports vision
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 3000  # Increased for image analysis
     }
     
     try:
-        with httpx.Client(base_url=config["base_url"], timeout=60) as client:
+        with httpx.Client(base_url=config["base_url"], timeout=120) as client:
             response = client.post("/chat/completions", headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
             
         content = data["choices"][0]["message"]["content"].strip()
-        
+
         # Try to extract JSON if present
         structured_data = None
         if "```json" in content:
@@ -197,41 +358,70 @@ Provide both:
                     content = content.replace(json_match.group(0), "").strip()
                 except:
                     pass
-        
+
+        # Record to agent memory if database session provided
+        if db:
+            try:
+                from services.agent_memory import AgentMemoryService
+
+                # Extract key findings from structured data
+                key_findings = {}
+                if structured_data:
+                    if 'urgent_items' in structured_data:
+                        key_findings['urgent_items'] = structured_data['urgent_items']
+                    if 'deadlines' in structured_data:
+                        key_findings['deadlines'] = structured_data['deadlines']
+
+                # Get subject from email content
+                subject = email_content[0].get('subject', 'Unknown') if email_content else 'Unknown'
+
+                # Record the analysis
+                AgentMemoryService.record_event(
+                    db=db,
+                    agent_type='triage',
+                    event_type='email_analyzed',
+                    summary=f"Analyzed email: {subject[:100]}",
+                    context_data={
+                        'email_subject': subject,
+                        'sender': email_content[0].get('from', '') if email_content else '',
+                        'has_images': len(all_images) > 0,
+                        'analysis_summary': content[:500]
+                    },
+                    key_findings=key_findings,
+                    related_entities={
+                        'emails': [thread_id]
+                    },
+                    email_id=thread_id,
+                    model_used=config["model"],
+                    confidence_score=85 if structured_data else 70
+                )
+            except Exception as mem_error:
+                # Don't fail email analysis if memory recording fails
+                print(f"Warning: Failed to record to agent memory: {mem_error}")
+
         return {
             "summary": content,
-            "structured_data": structured_data
+            "structured_data": structured_data,
+            "has_images": len(all_images) > 0,
+            "images_analyzed": len(all_images) if use_vision else 0
         }
         
     except httpx.HTTPStatusError as e:
         return {
             "summary": f"[API Error {e.response.status_code}]: {e.response.text}",
-            "structured_data": None
+            "structured_data": None,
+            "has_images": len(all_images) > 0
         }
     except Exception as e:
         return {
             "summary": f"[Error]: {str(e)}",
-            "structured_data": None
+            "structured_data": None,
+            "has_images": len(all_images) > 0
         }
 
 def extract_message_body(payload: dict) -> str:
-    """Extract the full body text from email payload"""
-    body = ""
-    
-    if "parts" in payload:
-        for part in payload["parts"]:
-            if part.get("mimeType") == "text/plain":
-                data = part.get("body", {}).get("data", "")
-                if data:
-                    import base64
-                    body += base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-            elif "parts" in part:
-                body += extract_message_body(part)
-    else:
-        if payload.get("body", {}).get("data"):
-            import base64
-            body = base64.urlsafe_b64decode(payload["body"]["data"]).decode('utf-8', errors='ignore')
-    
+    """Extract the full body text from email payload (legacy function)"""
+    body, _ = extract_attachments_with_images(payload)
     return body
 
 def batch_summarize_threads(thread_ids: list) -> dict:
@@ -243,13 +433,18 @@ def batch_summarize_threads(thread_ids: list) -> dict:
     all_tasks = []
     emergency_items = []
     deadlines = []
+    total_images = 0
     
     for thread_id in thread_ids:
         result = summarize_thread_advanced(thread_id)
         all_summaries.append({
             "thread_id": thread_id,
-            "summary": result["summary"]
+            "summary": result["summary"],
+            "has_images": result.get("has_images", False)
         })
+        
+        if result.get("has_images"):
+            total_images += result.get("images_analyzed", 0)
         
         if result.get("structured_data"):
             data = result["structured_data"]
@@ -265,7 +460,8 @@ def batch_summarize_threads(thread_ids: list) -> dict:
         "emergency_items": emergency_items,
         "deadlines": deadlines,
         "tasks": all_tasks,
-        "total_actionable": len(emergency_items) + len(deadlines) + len(all_tasks)
+        "total_actionable": len(emergency_items) + len(deadlines) + len(all_tasks),
+        "images_analyzed": total_images
     }
 
 # Keep the original simple function for backward compatibility

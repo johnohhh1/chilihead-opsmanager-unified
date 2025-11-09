@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
+from sqlalchemy.orm import Session
 
 from routes.oauth import router as oauth_router
 from routes.mail import router as mail_router
@@ -19,6 +20,7 @@ from services.ai_triage import summarize_thread_advanced, batch_summarize_thread
 from services.smart_assistant import smart_triage, daily_digest
 from services.state_manager import state_manager
 from services.model_provider import ModelProvider
+from database import get_db
 
 load_dotenv()
 
@@ -53,10 +55,10 @@ async def summarize(payload: SummarizeIn):
         raise HTTPException(500, str(e))
 
 @app.post("/ai-triage")
-async def ai_triage(payload: SummarizeIn):
-    """Advanced AI triage with structured extraction"""
+async def ai_triage(payload: SummarizeIn, db: Session = Depends(get_db)):
+    """Advanced AI triage with structured extraction - now records to agent memory!"""
     try:
-        result = summarize_thread_advanced(payload.thread_id)
+        result = summarize_thread_advanced(payload.thread_id, db=db)
         # Mark as analyzed
         state_manager.mark_analyzed(payload.thread_id)
         return result
@@ -77,8 +79,8 @@ async def batch_triage(payload: BatchTriageIn):
         raise HTTPException(500, str(e))
 
 @app.post("/smart-triage")
-async def smart_analysis(payload: SummarizeIn):
-    """Smart context-aware analysis that actually understands emails"""
+async def smart_analysis(payload: SummarizeIn, db: Session = Depends(get_db)):
+    """Smart context-aware analysis that actually understands emails - with agent memory!"""
     try:
         result = smart_triage(payload.thread_id, model=payload.model)
         # Mark as analyzed
@@ -88,10 +90,10 @@ async def smart_analysis(payload: SummarizeIn):
         raise HTTPException(500, str(e))
 
 @app.get("/daily-digest")
-async def get_daily_digest(model: str = "gpt-4o"):
-    """Get daily operations brief"""
+async def get_daily_digest(model: str = "gpt-4o", db: Session = Depends(get_db)):
+    """Get daily operations brief - now with agent memory context!"""
     try:
-        result = daily_digest(model=model)
+        result = daily_digest(model=model, db=db)
         return result
     except Exception as e:
         raise HTTPException(500, str(e))

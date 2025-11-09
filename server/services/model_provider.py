@@ -157,7 +157,7 @@ class ModelProvider:
         temperature: float,
         max_tokens: int
     ) -> str:
-        """OpenAI completion (SYNC)"""
+        """OpenAI completion (SYNC) - GPT-5 and GPT-4 both use chat/completions"""
         config = ModelProvider.get_openai_config()
 
         if not config["api_key"]:
@@ -171,17 +171,32 @@ class ModelProvider:
         if config["project_id"]:
             headers["OpenAI-Project"] = config["project_id"]
 
+        # Both GPT-4 and GPT-5 support /chat/completions
+        # Use max_completion_tokens for GPT-5 models
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens
         }
+        
+        # GPT-5 models have specific requirements
+        if model.startswith("gpt-5") or model.startswith("o1") or model.startswith("o3"):
+            payload["max_completion_tokens"] = max_tokens
+            # GPT-5 only supports temperature=1 (default), so omit it
+            # If temperature is not 1, we'll just use the default
+        else:
+            payload["max_tokens"] = max_tokens
+            payload["temperature"] = temperature
 
         with httpx.Client(base_url=config["base_url"], timeout=60) as client:
-            response = client.post("/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
+            try:
+                response = client.post("/chat/completions", headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                print(f"[OpenAI API Error] Status: {e.response.status_code}")
+                print(f"[OpenAI API Error] Response: {e.response.text}")
+                print(f"[OpenAI API Error] Payload sent: {payload}")
+                raise
 
         return data["choices"][0]["message"]["content"].strip()
 
@@ -192,7 +207,7 @@ class ModelProvider:
         temperature: float,
         max_tokens: int
     ) -> str:
-        """OpenAI completion (ASYNC)"""
+        """OpenAI completion (ASYNC) - GPT-5 and GPT-4 both use chat/completions"""
         config = ModelProvider.get_openai_config()
 
         if not config["api_key"]:
@@ -206,17 +221,32 @@ class ModelProvider:
         if config["project_id"]:
             headers["OpenAI-Project"] = config["project_id"]
 
+        # Both GPT-4 and GPT-5 support /chat/completions
+        # Use max_completion_tokens for GPT-5 models
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens
         }
+        
+        # GPT-5 models have specific requirements
+        if model.startswith("gpt-5") or model.startswith("o1") or model.startswith("o3"):
+            payload["max_completion_tokens"] = max_tokens
+            # GPT-5 only supports temperature=1 (default), so omit it
+            # If temperature is not 1, we'll just use the default
+        else:
+            payload["max_tokens"] = max_tokens
+            payload["temperature"] = temperature
 
         async with httpx.AsyncClient(base_url=config["base_url"], timeout=60) as client:
-            response = await client.post("/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
+            try:
+                response = await client.post("/chat/completions", headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                print(f"[OpenAI API Error] Status: {e.response.status_code}")
+                print(f"[OpenAI API Error] Response: {e.response.text}")
+                print(f"[OpenAI API Error] Payload sent: {payload}")
+                raise
 
         return data["choices"][0]["message"]["content"].strip()
 

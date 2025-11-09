@@ -23,14 +23,35 @@ def get_openai_config():
         "org_id": os.getenv("OPENAI_ORG_ID")
     }
 
-# More natural, context-aware prompt
-SMART_ASSISTANT_PROMPT = """
-You are John's executive assistant AI. You read his restaurant emails and tell him EXACTLY what he needs to do.
+# AUBS PERSONA - Auburn Hills Assistant
+AUBS_PERSONA = """
+You are AUBS (Auburn Hills Assistant) - John's operations AI for Chili's #605.
+
+PERSONALITY:
+- Direct, no-nonsense, like a trusted GM who's seen it all
+- Midwest-friendly but gets straight to the point
+- Uses restaurant lingo naturally (86'd, in the weeds, BOH, FOH)
+- Calls out problems clearly but offers solutions
+- Has your back but won't sugarcoat issues
+
+SPEECH PATTERNS:
+- "Here's the deal..." when getting to the point
+- "Heads up..." for warnings
+- "Real talk..." when being blunt
+- "You're in the weeds on..." when overwhelmed
+- "Let's knock out..." for action items
+"""
+
+# More natural, context-aware prompt with AUBS
+SMART_ASSISTANT_PROMPT_TEMPLATE = """
+{aubs_persona}
+
+You read John's restaurant emails and tell him EXACTLY what he needs to do - in AUBS voice.
 
 Your job is NOT to reformat emails. Your job is to:
 1. Understand what's actually happening
 2. Figure out what John needs to do about it
-3. Tell him in plain English, like a smart assistant would
+3. Tell him straight - like a trusted GM would
 4. **EXTRACT specific actionable tasks with deadlines**
 
 Context:
@@ -136,7 +157,10 @@ def smart_triage(thread_id: str, model: str = "gpt-4o") -> dict:
 
     current_time = datetime.now().strftime('%A, %B %d, %Y at %I:%M %p ET')
 
-    prompt = SMART_ASSISTANT_PROMPT.format(current_time=current_time)
+    prompt = SMART_ASSISTANT_PROMPT_TEMPLATE.format(
+        aubs_persona=AUBS_PERSONA,
+        current_time=current_time
+    )
     prompt += "\n\nEMAIL THREAD TO ANALYZE:\n"
     prompt += json.dumps(thread_data, indent=2)
     prompt += "\n\nProvide your analysis and extracted action items in a conversational but structured way."
@@ -355,10 +379,11 @@ def parse_due_date(due_text: str) -> str:
     # Default: no specific date found
     return None
 
-def daily_digest(model: str = "gpt-4o") -> dict:
+def daily_digest(model: str = "gpt-4o", db = None) -> dict:
     """
     Generate a daily digest of all important items
     Like a morning briefing from your assistant
+    Now uses agent memory for better context!
     """
     from .gmail import get_user_threads
     from .priority_filter import load_watch_config
@@ -414,12 +439,27 @@ def daily_digest(model: str = "gpt-4o") -> dict:
                     "snippet": body[:500]  # First 500 chars
                 })
         
+        # Get agent memory context if database provided
+        agent_context = ""
+        if db:
+            try:
+                from services.agent_memory import AgentMemoryService
+                agent_context = AgentMemoryService.get_digest_context(db, hours=24)
+            except Exception as e:
+                print(f"Warning: Could not load agent memory: {e}")
+
         # Generate AI digest
         prompt = f"""
-You are John's executive assistant.
+You are AUBS (Auburn Hills Assistant) - John's executive assistant.
 
 TODAY'S DATE: {current_time.strftime('%A, %B %d, %Y')}
 CURRENT TIME: {current_time.strftime('%I:%M %p ET')}
+
+CONTEXT FROM YOUR RECENT WORK:
+{agent_context if agent_context else "(No recent agent activity to reference)"}
+
+The context above shows what you (and other AI agents) have already analyzed, flagged, or discussed.
+Use this to avoid redundancy and build on previous findings.
 
 Review these {len(email_summaries)} emails from the last 24 hours and create a morning operations brief.
 
@@ -443,7 +483,7 @@ If there are no urgent items, say so clearly. Don't make up fake issues.
 """
 
         messages = [
-            {"role": "system", "content": "You are an intelligent executive assistant who understands context and priorities."},
+            {"role": "system", "content": "You are AUBS - Auburn Hills Assistant. You are an intelligent executive assistant who understands context and priorities."},
             {"role": "user", "content": prompt}
         ]
 
@@ -453,7 +493,36 @@ If there are no urgent items, say so clearly. Don't make up fake issues.
             temperature=0.3,
             max_tokens=3000  # Increased from 1000 for more detailed output
         )
-        
+
+        # Record digest generation to agent memory
+        if db:
+            try:
+                from services.agent_memory import AgentMemoryService
+
+                # Extract key findings from digest text
+                key_findings = {
+                    'emails_analyzed': len(email_summaries),
+                    'has_urgent': '🔴' in digest_text or 'URGENT' in digest_text.upper(),
+                    'has_deadlines': '🟡' in digest_text or 'DEADLINE' in digest_text.upper()
+                }
+
+                AgentMemoryService.record_event(
+                    db=db,
+                    agent_type='daily_brief',
+                    event_type='digest_generated',
+                    summary=f"Generated daily digest analyzing {len(email_summaries)} emails",
+                    context_data={
+                        'digest_preview': digest_text[:500],
+                        'email_count': len(email_summaries),
+                        'generated_time': current_time.strftime('%I:%M %p ET')
+                    },
+                    key_findings=key_findings,
+                    model_used=model,
+                    confidence_score=90
+                )
+            except Exception as mem_error:
+                print(f"Warning: Failed to record digest to agent memory: {mem_error}")
+
         return {
             "digest": digest_text,
             "generated_at": current_time.isoformat(),

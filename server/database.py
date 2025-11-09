@@ -42,7 +42,7 @@ def init_db():
     """Initialize database - create all tables"""
     from models import Base
     Base.metadata.create_all(bind=engine)
-    print("✅ Database initialized successfully!")
+    print("[OK] Database initialized successfully!")
 
 
 if __name__ == "__main__":
@@ -50,6 +50,6 @@ if __name__ == "__main__":
     print(f"Testing connection to: {DATABASE_URL}")
     try:
         with engine.connect() as conn:
-            print("✅ Database connection successful!")
+            print("[OK] Database connection successful!")
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
+        print(f"[ERROR] Database connection failed: {e}")
