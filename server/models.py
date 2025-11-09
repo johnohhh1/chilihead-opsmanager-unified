@@ -137,3 +137,63 @@ class ChatMessage(Base):
     __table_args__ = (
         CheckConstraint("role IN ('user', 'assistant', 'system')", name='check_message_role'),
     )
+
+
+class AgentMemory(Base):
+    """Centralized memory store for all AI agents to share context and coordinate"""
+    __tablename__ = 'agent_memory'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    agent_type = Column(String(50), nullable=False, index=True)  # 'triage', 'daily_brief', 'operations_chat', 'delegation_advisor'
+    event_type = Column(String(50), nullable=False, index=True)  # 'email_analyzed', 'task_created', 'delegation_suggested', 'question_answered', 'digest_generated'
+
+    # Core content
+    summary = Column(Text)  # Human-readable summary of what happened
+    context_data = Column(JSON)  # Full context: email content, analysis, etc.
+    key_findings = Column(JSON)  # Extracted important info: deadlines, urgent items, action items
+    related_entities = Column(JSON)  # {people: [], emails: [], tasks: [], deadlines: []}
+
+    # Relationships
+    session_id = Column(String(36), index=True)  # Links to AgentSession if part of batch work
+    email_id = Column(String(255), index=True)  # Gmail message/thread ID if related to email
+    task_id = Column(String(36), index=True)  # Task ID if related to a task
+    delegation_id = Column(String(36), index=True)  # Delegation ID if related to delegation
+
+    # Metadata
+    model_used = Column(String(50))  # AI model that generated this memory
+    tokens_used = Column(Integer)
+    confidence_score = Column(Integer)  # 0-100, how confident the agent was
+    created_at = Column(DateTime, default=func.now(), index=True)
+
+    __table_args__ = (
+        CheckConstraint("agent_type IN ('triage', 'daily_brief', 'operations_chat', 'delegation_advisor', 'smart_triage')", name='check_agent_type'),
+        CheckConstraint("event_type IN ('email_analyzed', 'task_created', 'delegation_suggested', 'question_answered', 'digest_generated', 'deadline_identified', 'urgent_item_flagged')", name='check_event_type'),
+    )
+
+
+class AgentSession(Base):
+    """Track batch work sessions (like processing 20 emails or generating daily digest)"""
+    __tablename__ = 'agent_sessions'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    agent_type = Column(String(50), nullable=False, index=True)
+    session_type = Column(String(50), nullable=False)  # 'daily_digest', 'email_batch_triage', 'deadline_scan'
+
+    # Session details
+    started_at = Column(DateTime, default=func.now())
+    completed_at = Column(DateTime)
+    items_processed = Column(Integer, default=0)
+
+    # Results
+    summary = Column(Text)  # High-level summary of what was accomplished
+    findings_json = Column(JSON)  # Structured findings: {urgent_items: [], deadlines: [], tasks_created: []}
+    model_used = Column(String(50))
+    total_tokens = Column(Integer)
+
+    # Status
+    status = Column(String(20), default='running')  # 'running', 'completed', 'error'
+    error_message = Column(Text)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('running', 'completed', 'error')", name='check_session_status'),
+    )

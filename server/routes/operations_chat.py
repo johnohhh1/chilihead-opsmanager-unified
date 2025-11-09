@@ -39,33 +39,111 @@ def get_openai_config():
         "org_id": os.getenv("OPENAI_ORG_ID")
     }
 
-SYSTEM_PROMPT = """
-You are John's executive assistant AI for his Chili's restaurant operations.
+# AUBS PERSONA for chatbot
+AUBS_PERSONA = """
+You are AUBS (Auburn Hills Assistant) - John's operations AI for Chili's #605.
 
-Your role is to help John understand and manage his daily operations by:
-1. Answering questions about his tasks, deadlines, and priorities
-2. Providing context and details about operations
-3. Offering advice on prioritization and delegation
-4. Explaining why certain things are important or urgent
+PERSONALITY:
+- Direct, no-nonsense, like a trusted GM who's seen it all
+- Midwest-friendly but gets straight to the point
+- Uses restaurant lingo naturally (86'd, in the weeds, BOH, FOH)
+- Calls out problems clearly but offers solutions
+- Has your back but won't sugarcoat issues
+
+SPEECH PATTERNS:
+- "Here's the deal..." when getting to the point
+- "Heads up..." for warnings
+- "Real talk..." when being blunt
+- "You're in the weeds on..." when overwhelmed
+- "Let's knock out..." for action items
+"""
+
+SYSTEM_PROMPT_TEMPLATE = """
+{aubs_persona}
+
+Your role is to help John understand and manage his Chili's #605 operations by:
+1. Answering questions about tasks, deadlines, and priorities (AUBS style)
+2. Providing context and details from his emails and operations data
+3. Offering straight-talk advice on prioritization and delegation
+4. Explaining why things matter and what happens if ignored
 5. Helping him plan his day efficiently
 
-Be conversational, helpful, and specific. Use the context provided about today's operations to give accurate, actionable answers.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AGENT MEMORY (Your Recent Work - Reference This!):
+{agent_memory_context}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The section above contains your memory from:
+- Email analyses you performed (what you found urgent, deadlines you identified)
+- Daily digests you generated (what you flagged this morning)
+- Questions John asked you previously (recent chat history)
+
+IMPORTANT: Reference this memory naturally in your responses. Examples:
+- "I flagged that Corrigo invoice this morning when I analyzed your emails..."
+- "When I generated today's digest, I noticed Hannah's payroll issue..."
+- "You asked me about that yesterday, and here's the update..."
+
+Use this memory to provide coherent, context-aware responses that build on previous work.
+
+Be conversational, helpful, and specific. Use both the operations context AND email data to give accurate answers.
 
 If asked about:
-- Urgent items: Focus on what needs immediate attention and why
-- Deadlines: Be specific about dates, times, and consequences
-- People: Mention names, contact info, and context
-- Tasks: Break down what needs to be done and estimated time
-- Priorities: Explain reasoning based on impact and urgency
+- Urgent items: Call it out clearly - "Here's the deal..."
+- Deadlines: Be specific with dates, times, and real-talk consequences
+- People: Names, contact info, and full context
+- Tasks: Break it down with time estimates
+- Priorities: Explain reasoning (guest safety > team > business > compliance)
+- Emails: You can see and reference his recent emails
+- Previous analyses: "I flagged that invoice this morning in my email triage..."
 
-Keep responses concise but complete. If you don't have specific information in the context, say so and offer to help in other ways.
+Keep responses concise but complete. If you don't have specific info, say so and offer alternatives.
 """
+
+def get_recent_emails_context(db: Session, limit: int = 20) -> str:
+    """
+    Fetch recent emails from database for chatbot context
+    """
+    from models import EmailState
+    from datetime import datetime, timedelta
+    
+    # Get emails from last 48 hours
+    cutoff = datetime.now() - timedelta(hours=48)
+    
+    recent_emails = db.query(EmailState).filter(
+        EmailState.received_at >= cutoff
+    ).order_by(EmailState.received_at.desc()).limit(limit).all()
+    
+    if not recent_emails:
+        return "No recent emails in database."
+    
+    email_context = f"RECENT EMAILS (Last 48 hours, {len(recent_emails)} emails):\n\n"
+    
+    for email in recent_emails:
+        email_context += f"---\n"
+        email_context += f"FROM: {email.sender}\n"
+        email_context += f"SUBJECT: {email.subject}\n"
+        if email.received_at:
+            email_context += f"RECEIVED: {email.received_at.strftime('%b %d, %I:%M %p')}\n"
+        
+        # Add AI analysis if available
+        if email.ai_analysis:
+            # ai_analysis is JSON, get the summary or analysis field
+            analysis = email.ai_analysis
+            if isinstance(analysis, dict):
+                summary = analysis.get('summary', analysis.get('analysis', ''))
+                if summary:
+                    email_context += f"ANALYSIS: {str(summary)[:300]}...\n"
+        
+        email_context += "\n"
+    
+    return email_context
 
 @router.post("/api/operations-chat")
 async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
     """
     Chat with AI assistant about daily operations - persists to PostgreSQL
     Supports both OpenAI and Ollama models
+    Now includes email database access!
     """
 
     # Get or create chat session
@@ -92,8 +170,21 @@ async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
     )
     db.add(user_message)
 
-    # Build context for the AI
+    # Build context for the AI (including emails and agent memory!)
     context_text = ""
+
+    # Get agent memory context
+    agent_memory_context = ""
+    try:
+        from services.agent_memory import AgentMemoryService
+        agent_memory_context = AgentMemoryService.get_coordination_context(db, hours=48, format="text")
+    except Exception as e:
+        print(f"Warning: Could not load agent memory: {e}")
+        agent_memory_context = "(Agent memory temporarily unavailable)"
+
+    # Add email context from database
+    email_context = get_recent_emails_context(db, limit=15)
+    context_text += f"\n\n{email_context}\n"
 
     if request.context:
         daily_digest = request.context.get("dailyDigest", "")
@@ -121,7 +212,10 @@ async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
 
     # Build conversation history from database
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT + context_text}
+        {"role": "system", "content": SYSTEM_PROMPT_TEMPLATE.format(
+            aubs_persona=AUBS_PERSONA,
+            agent_memory_context=agent_memory_context
+        ) + context_text}
     ]
 
     # Get previous messages from this session (last 10 for context)
@@ -166,6 +260,27 @@ async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
         session.message_count = db.query(ChatMessageModel).filter(
             ChatMessageModel.session_id == session.id
         ).count()
+
+        # Record chat interaction to agent memory
+        try:
+            from services.agent_memory import AgentMemoryService
+
+            AgentMemoryService.record_event(
+                db=db,
+                agent_type='operations_chat',
+                event_type='question_answered',
+                summary=f"Answered: {request.message[:80]}...",
+                context_data={
+                    'user_question': request.message,
+                    'assistant_response': assistant_response[:500],
+                    'model_used': request.model
+                },
+                key_findings={},
+                model_used=request.model,
+                confidence_score=80
+            )
+        except Exception as mem_error:
+            print(f"Warning: Failed to record chat to agent memory: {mem_error}")
 
         db.commit()
 

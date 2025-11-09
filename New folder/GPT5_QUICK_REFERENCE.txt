@@ -1,0 +1,173 @@
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    GPT-5 API Quick Reference Card                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+MYTH vs REALITY
+───────────────────────────────────────────────────────────────────────────────
+
+❌ MYTH: GPT-5 requires /v1/responses endpoint
+✅ REALITY: GPT-5 works with /v1/chat/completions (same as GPT-4!)
+
+❌ MYTH: GPT-5 needs "prompt" instead of "messages"
+✅ REALITY: GPT-5 uses the same "messages" format as GPT-4
+
+❌ MYTH: You need to completely rewrite your code for GPT-5
+✅ REALITY: Change 1 parameter name: max_tokens → max_completion_tokens
+
+
+API COMPARISON
+───────────────────────────────────────────────────────────────────────────────
+
+┌─────────────────────────────────┬─────────────────────────────────┐
+│           GPT-4                 │           GPT-5                 │
+├─────────────────────────────────┼─────────────────────────────────┤
+│ POST /v1/chat/completions       │ POST /v1/chat/completions       │
+│                                 │                                 │
+│ {                               │ {                               │
+│   "model": "gpt-4o",            │   "model": "gpt-5",             │
+│   "messages": [                 │   "messages": [                 │
+│     {"role": "system",          │     {"role": "system",          │
+│      "content": "You are..."},  │      "content": "You are..."},  │
+│     {"role": "user",            │     {"role": "user",            │
+│      "content": "Hello"}        │      "content": "Hello"}        │
+│   ],                            │   ],                            │
+│   "temperature": 0.7,           │   "temperature": 0.7,           │
+│   "max_tokens": 1000   ←────┐   │   "max_completion_tokens": 1000 │
+│ }                          │   │ }                               │
+│                            │   │                                 │
+│                            └───┼→ ONLY DIFFERENCE!              │
+└─────────────────────────────────┴─────────────────────────────────┘
+
+
+RESPONSE FORMAT (IDENTICAL)
+───────────────────────────────────────────────────────────────────────────────
+
+Both GPT-4 and GPT-5 return:
+{
+  "id": "chatcmpl-...",
+  "object": "chat.completion",
+  "model": "gpt-5",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hi there! How can I help?"
+      }
+    }
+  ]
+}
+
+Extract response: data["choices"][0]["message"]["content"]
+
+
+CODE IMPLEMENTATION
+───────────────────────────────────────────────────────────────────────────────
+
+Python (what we implemented):
+
+def call_openai(model, messages, max_tokens):
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.7
+    }
+    
+    # Only difference: parameter name
+    if model.startswith("gpt-5"):
+        payload["max_completion_tokens"] = max_tokens
+    else:
+        payload["max_tokens"] = max_tokens
+    
+    response = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json=payload
+    )
+    
+    return response.json()["choices"][0]["message"]["content"]
+
+
+WHEN TO USE /responses API
+───────────────────────────────────────────────────────────────────────────────
+
+The /responses API is for ADVANCED features only:
+
+  ✓ Custom tools with context-free grammars
+  ✓ Freeform function calling (non-JSON outputs)
+  ✓ Verbosity controls (low/medium/high)
+  ✓ Reasoning effort controls (minimal/low/medium/high)
+
+For standard chat completion (99% of use cases):
+  → Use /chat/completions for BOTH GPT-4 and GPT-5
+
+
+MODELS THAT USE max_completion_tokens
+───────────────────────────────────────────────────────────────────────────────
+
+Our code checks for these prefixes:
+  • gpt-5
+  • o1
+  • o3
+
+Models:
+  • gpt-5
+  • gpt-5-mini
+  • gpt-5-nano
+  • gpt-5-pro
+  • o1
+  • o1-preview
+  • o3
+  • o3-mini
+
+All other models (gpt-4o, gpt-4o-mini, gpt-3.5-turbo) use max_tokens.
+
+
+TROUBLESHOOTING
+───────────────────────────────────────────────────────────────────────────────
+
+Error: 400 Bad Request
+
+Possible causes:
+  1. Using max_tokens instead of max_completion_tokens with GPT-5
+     → Fix: Update parameter name
+  
+  2. Your account doesn't have GPT-5 access yet
+     → Check: OpenAI dashboard for model availability
+  
+  3. Invalid API key or missing permissions
+     → Check: OPENAI_API_KEY in .env file
+
+Error: Model not found
+
+  → GPT-5 may not be available in your region yet
+  → Check OpenAI status page and release notes
+
+
+TESTING
+───────────────────────────────────────────────────────────────────────────────
+
+Run the test script:
+  cd C:\Users\John\Desktop\chilihead-opsmanager-unified\server
+  python test_gpt5.py
+
+This will test:
+  ✓ GPT-5 (full)
+  ✓ GPT-5 Mini
+  ✓ GPT-5 Nano
+  ✓ GPT-4o (for comparison)
+
+
+SUMMARY
+───────────────────────────────────────────────────────────────────────────────
+
+1. GPT-5 uses the SAME /chat/completions endpoint as GPT-4
+2. Messages format is IDENTICAL
+3. Only difference: max_tokens → max_completion_tokens
+4. Everything else stays the same
+
+That's it! 🎉
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Your ChiliHead OpsManager is ready to use GPT-5! 🌶️                        │
+└──────────────────────────────────────────────────────────────────────────────┘

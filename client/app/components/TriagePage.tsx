@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import DailyBriefModal from './DailyBriefModal';
 
 interface EmailThread {
   id: string;
@@ -52,6 +53,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
   const [dateTo, setDateTo] = useState('');
   const [showDigest, setShowDigest] = useState(false);
   const [digest, setDigest] = useState<string>('');
+  const [digestGeneratedAt, setDigestGeneratedAt] = useState<string>('');
   const [hideAcknowledged, setHideAcknowledged] = useState(false);
   const [showDeadlines, setShowDeadlines] = useState(false);
   const [deadlineReport, setDeadlineReport] = useState('');
@@ -338,6 +340,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
       const response = await fetch(`/api/backend/daily-digest?t=${Date.now()}&model=${selectedModel}`);
       const data = await response.json();
       setDigest(data.digest);
+      setDigestGeneratedAt(data.generated_at || new Date().toISOString());
       setShowDigest(true);
     } catch (error) {
       console.error('Failed to get digest:', error);
@@ -708,29 +711,13 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
         </div>
       )}
 
-      {/* Daily Digest Banner */}
+      {/* Daily Brief Modal - Full Screen Chat Experience */}
       {showDigest && digest && (
-        <div className="bg-gradient-to-r from-blue-900 to-blue-800 text-white rounded-xl shadow-lg p-6 border border-blue-800">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="text-xl font-bold mb-3 flex items-center">
-                <Sparkles className="h-6 w-6 mr-2" />
-                Your Daily Operations Brief
-              </h3>
-              <div className="text-sm opacity-90 prose prose-sm max-w-none prose-invert">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {digest || 'No digest available'}
-                </ReactMarkdown>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowDigest(false)}
-              className="text-white/70 hover:text-white"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
+        <DailyBriefModal
+          digest={digest}
+          generatedAt={digestGeneratedAt}
+          onClose={() => setShowDigest(false)}
+        />
       )}
 
       {/* Deadline Scanner Results */}
@@ -1063,9 +1050,6 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
                             </ReactMarkdown>
                           </div>
                         </div>
-
-                        {/* Debug: Log tasks to console */}
-                        {console.log('Analysis tasks:', analysis.tasks)}
 
                         {/* Extracted Actions */}
                         {analysis.tasks && analysis.tasks.length > 0 && (
