@@ -129,7 +129,7 @@ def extract_message_body(payload: dict) -> str:
     
     return body
 
-def smart_triage(thread_id: str, model: str = "gpt-4o") -> dict:
+def smart_triage(thread_id: str, model: str = "gpt-4o", db = None) -> dict:
     """
     Actually understand the email and provide intelligent analysis
     Not just reformatting - real comprehension
@@ -183,16 +183,66 @@ def smart_triage(thread_id: str, model: str = "gpt-4o") -> dict:
             temperature=0.3,
             max_tokens=1500
         )
-        
+
         # Extract specific tasks if mentioned
         tasks = extract_smart_tasks(analysis, thread_data)
-        
-        return {
+
+        result = {
             "analysis": analysis,
             "tasks": tasks,
             "thread_id": thread_id
         }
-        
+
+        # Cache email and analysis if database provided
+        if db:
+            try:
+                from services.email_sync import EmailSyncService
+                from datetime import datetime
+
+                # Cache the raw email
+                EmailSyncService.cache_email(
+                    db=db,
+                    thread_id=thread_id,
+                    gmail_message_id=gmail_message['id'],
+                    subject=thread_data[0].get('subject', ''),
+                    sender=thread_data[0].get('from', ''),
+                    recipients={'to': [thread_data[0].get('to', '')]},
+                    body_text=thread_data[0].get('body', ''),
+                    body_html='',
+                    attachments=[],
+                    labels=gmail_message.get('labelIds', []),
+                    received_at=datetime.now(),
+                    has_images=False
+                )
+
+                # Determine priority and category
+                priority_score = 70  # Default
+                category = 'routine'
+                if "🔴" in analysis or "URGENT" in analysis.upper():
+                    priority_score = 90
+                    category = 'urgent'
+                elif "🟡" in analysis or "HIGH" in analysis.upper():
+                    priority_score = 75
+                    category = 'important'
+
+                # Cache the analysis
+                EmailSyncService.cache_analysis(
+                    db=db,
+                    thread_id=thread_id,
+                    analysis_json=result,
+                    model_used=model,
+                    priority_score=priority_score,
+                    category=category,
+                    key_entities={'tasks': [t['action'] for t in tasks]},
+                    suggested_tasks=tasks,
+                    sentiment='neutral',
+                    tokens_used=1500  # Estimate
+                )
+            except Exception as cache_error:
+                print(f"Warning: Failed to cache analysis: {cache_error}")
+
+        return result
+
     except Exception as e:
         return {
             "analysis": f"Error: {str(e)}",

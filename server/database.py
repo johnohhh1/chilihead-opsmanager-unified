@@ -51,5 +51,10 @@ if __name__ == "__main__":
     try:
         with engine.connect() as conn:
             print("[OK] Database connection successful!")
+
+        # Initialize database (create tables)
+        print("\nInitializing database tables...")
+        init_db()
+
     except Exception as e:
         print(f"[ERROR] Database connection failed: {e}")

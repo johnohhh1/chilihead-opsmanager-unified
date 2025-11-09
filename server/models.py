@@ -94,17 +94,58 @@ class WatchConfig(Base):
     )
 
 
-class AIAnalysisCache(Base):
-    """Cache AI analysis results to avoid re-processing"""
-    __tablename__ = 'ai_analysis_cache'
+class EmailCache(Base):
+    """Mirror of Gmail emails - stores raw email data locally"""
+    __tablename__ = 'email_cache'
 
-    id = Column(String(36), primary_key=True, default=generate_uuid)
-    email_id = Column(String(255), unique=True, nullable=False, index=True)
-    prompt_hash = Column(String(64))  # Hash of the prompt used
-    analysis_result = Column(JSON)
-    model_used = Column(String(50))
+    thread_id = Column(String(255), primary_key=True)
+    gmail_message_id = Column(String(255), unique=True, index=True)
+    subject = Column(Text)
+    sender = Column(String(255), index=True)
+    recipients = Column(JSON)  # {to: [], cc: [], bcc: []}
+    body_text = Column(Text)
+    body_html = Column(Text)
+    attachments_json = Column(JSON)  # [{filename, size, mimetype, has_preview}]
+    labels = Column(JSON)  # ['INBOX', 'IMPORTANT', 'UNREAD']
+    received_at = Column(DateTime, index=True)
+    gmail_synced_at = Column(DateTime, default=func.now())
+    is_read = Column(Boolean, default=False)
+    is_archived = Column(Boolean, default=False)
+    has_images = Column(Boolean, default=False)
+
+
+class EmailAnalysisCache(Base):
+    """Cache AI analysis results with model quality tracking"""
+    __tablename__ = 'email_analysis_cache'
+
+    thread_id = Column(String(255), primary_key=True)
+
+    # Analysis content
+    analysis_json = Column(JSON)  # Full AI response
+    priority_score = Column(Integer, index=True)  # 0-100
+    category = Column(String(50), index=True)  # 'urgent', 'important', 'routine', 'fyi'
+    key_entities = Column(JSON)  # {people: [], deadlines: [], locations: [], amounts: []}
+    suggested_tasks = Column(JSON)  # Tasks AI thinks should be created
+    sentiment = Column(String(20))  # 'positive', 'neutral', 'negative', 'urgent'
+
+    # Model tracking and quality
+    model_used = Column(String(50), index=True)  # 'gpt-4o', 'oss-120b-cloud', 'llama3-70b-local'
+    model_tier = Column(String(20), index=True)  # 'trusted', 'experimental', 'unreliable'
+    trust_score = Column(Integer, default=50)  # 0-100, updated based on user feedback
     tokens_used = Column(Integer)
     analyzed_at = Column(DateTime, default=func.now())
+
+    # Re-analysis tracking
+    needs_reanalysis = Column(Boolean, default=False)
+    reanalysis_reason = Column(String(100))  # 'user_requested', 'model_hallucinated', 'upgrade_to_better_model'
+    analysis_version = Column(Integer, default=1)  # Increments on re-analysis
+    previous_analysis = Column(JSON)  # Store previous version for comparison
+    user_feedback = Column(String(20))  # 'accurate', 'missed_details', 'hallucinated', 'wrong_priority'
+
+    __table_args__ = (
+        CheckConstraint("model_tier IN ('trusted', 'experimental', 'unreliable')", name='check_model_tier'),
+        CheckConstraint("category IN ('urgent', 'important', 'routine', 'fyi', 'spam')", name='check_category'),
+    )
 
 
 class ChatSession(Base):
