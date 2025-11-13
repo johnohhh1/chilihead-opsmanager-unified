@@ -211,9 +211,16 @@ async def reanalyze_email(payload: ReanalysisIn, db: Session = Depends(get_db)):
     """Force re-analysis of an email with a different/better model"""
     try:
         from services.email_sync import EmailSyncService
+        from models import EmailAnalysisCache
 
-        # Flag for reanalysis
-        EmailSyncService.flag_for_reanalysis(db, payload.thread_id, payload.reason)
+        # DELETE the cached analysis so we get a fresh one
+        cached = db.query(EmailAnalysisCache).filter_by(thread_id=payload.thread_id).first()
+        if cached:
+            previous_model = cached.model_used
+            db.delete(cached)
+            db.commit()
+        else:
+            previous_model = None
 
         # Run fresh analysis with chosen model
         result = smart_triage(payload.thread_id, model=payload.model, db=db)
@@ -221,7 +228,8 @@ async def reanalyze_email(payload: ReanalysisIn, db: Session = Depends(get_db)):
         return {
             **result,
             "reanalyzed": True,
-            "previous_model": None  # Could fetch from previous_analysis if needed
+            "previous_model": previous_model,
+            "cached": False  # Explicitly mark as NOT cached
         }
     except Exception as e:
         raise HTTPException(500, str(e))
