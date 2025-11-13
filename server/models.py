@@ -238,3 +238,56 @@ class AgentSession(Base):
     __table_args__ = (
         CheckConstraint("status IN ('running', 'completed', 'error')", name='check_session_status'),
     )
+
+
+class DismissedItem(Base):
+    """Track dismissed/archived items from daily digest to prevent re-flagging"""
+    __tablename__ = 'dismissed_items'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+
+    # Item identification
+    item_type = Column(String(50), nullable=False)  # 'email', 'urgent_item', 'deadline', 'pattern'
+    identifier = Column(String(500), nullable=False, index=True)  # Email thread_id, task description hash, or unique identifier
+
+    # Original context
+    original_text = Column(Text)  # The text that was shown in the digest
+    email_thread_id = Column(String(255), index=True)  # If related to an email
+    email_subject = Column(String(500))
+
+    # Dismissal details
+    dismissed_by = Column(String(255), default='john')
+    dismissed_at = Column(DateTime, default=func.now(), index=True)
+    dismiss_reason = Column(String(100))  # 'resolved', 'not_relevant', 'duplicate', 'already_handled'
+    notes = Column(Text)  # User's optional notes
+
+    # Auto-expiry
+    expires_at = Column(DateTime, index=True)  # Auto-show again after this date (optional)
+    is_permanent = Column(Boolean, default=False)  # If true, never show again
+
+    __table_args__ = (
+        CheckConstraint("item_type IN ('email', 'urgent_item', 'deadline', 'pattern', 'suggestion')", name='check_item_type'),
+        CheckConstraint("dismiss_reason IN ('resolved', 'not_relevant', 'duplicate', 'already_handled', 'other')", name='check_dismiss_reason'),
+    )
+
+
+class PortalMetrics(Base):
+    """Daily portal results from Business Intelligence email (OCR-parsed)"""
+    __tablename__ = 'portal_metrics'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    report_date = Column(Date, nullable=False, unique=True, index=True)  # Date of the report
+
+    # Key Performance Indicators
+    sales = Column(Integer)  # Daily sales in dollars
+    labor_percent = Column(Integer)  # Labor % (stored as integer, e.g., 24.5 = 245)
+    guest_satisfaction = Column(Integer)  # Guest satisfaction score (e.g., 85.2 = 852)
+    food_cost_percent = Column(Integer)  # Food cost % (stored as integer)
+    speed_of_service = Column(Integer)  # Speed of service metric (time or score)
+
+    # Metadata
+    raw_ocr_text = Column(Text)  # Raw OCR text for debugging
+    email_sender = Column(String(255))  # c00605mgr@chilis.com
+    email_subject = Column(String(500))
+    parsed_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=func.now())

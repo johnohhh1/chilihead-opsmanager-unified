@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import SmartInboxPage from './components/SmartInboxPage';
 import TriagePage from './components/TriagePage';
 import TodoPage from './components/TodoPage';
 import DelegationsPage from './delegations/page';
@@ -9,14 +10,15 @@ import CalendarPage from './calendar/page';
 import TeamBoardPage from './components/TeamBoardPage';
 import OperationsChat from './components/OperationsChat';
 import SMSPage from './components/SMSPage';
+import PortalPage from './components/PortalPage';
 import {
-  Inbox, CheckSquare, Users, Brain, Sparkles, Calendar, UsersRound, MessageSquare
+  Inbox, CheckSquare, Users, Brain, Sparkles, Calendar, UsersRound, MessageSquare, BarChart3, Mail
 } from 'lucide-react';
 
 export default function OpsManagerDashboard() {
   const router = useRouter();
   const pathname = usePathname();
-  const [currentPage, setCurrentPage] = useState<'triage' | 'todo' | 'delegations' | 'calendar' | 'team-board' | 'sms'>('triage');
+  const [currentPage, setCurrentPage] = useState<'inbox' | 'triage' | 'todo' | 'delegations' | 'calendar' | 'team-board' | 'sms' | 'portal'>('triage');
   const [taskCount, setTaskCount] = useState(0);
   const [delegationCount, setDelegationCount] = useState(0);
   const [dailyDigest, setDailyDigest] = useState<string>("");
@@ -156,7 +158,22 @@ export default function OpsManagerDashboard() {
                     AI
                   </span>
                 </button>
-                
+
+                <button
+                  onClick={() => setCurrentPage('inbox')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 ${
+                    currentPage === 'inbox'
+                      ? 'bg-red-500 text-white'
+                      : 'text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span>Smart Inbox</span>
+                  <span className="ml-2 px-2 py-0.5 text-xs bg-orange-600 text-white rounded-full">
+                    WIP
+                  </span>
+                </button>
+
                 <button
                   onClick={() => setCurrentPage('todo')}
                   className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 ${
@@ -229,6 +246,18 @@ export default function OpsManagerDashboard() {
                   <MessageSquare className="h-4 w-4" />
                   <span>📱 Text Team</span>
                 </button>
+
+                <button
+                  onClick={() => setCurrentPage('portal')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 ${
+                    currentPage === 'portal'
+                      ? 'bg-red-500 text-white'
+                      : 'text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  <span>📊 Portal</span>
+                </button>
               </nav>
             </div>
 
@@ -246,6 +275,8 @@ export default function OpsManagerDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {currentPage === 'triage' ? (
           <TriagePage onAddToTodo={handleAddToTodo} onNavigate={setCurrentPage} />
+        ) : currentPage === 'inbox' ? (
+          <SmartInboxPage onAddToTodo={handleAddToTodo} onNavigate={setCurrentPage} />
         ) : currentPage === 'todo' ? (
           <TodoPage onNavigate={setCurrentPage} />
         ) : currentPage === 'calendar' ? (
@@ -254,6 +285,8 @@ export default function OpsManagerDashboard() {
           <TeamBoardPage onNavigate={setCurrentPage} />
         ) : currentPage === 'sms' ? (
           <SMSPage />
+        ) : currentPage === 'portal' ? (
+          <PortalPage />
         ) : (
           <DelegationsPage />
         )}

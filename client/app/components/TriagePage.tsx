@@ -54,6 +54,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
   const [showDigest, setShowDigest] = useState(false);
   const [digest, setDigest] = useState<string>('');
   const [digestGeneratedAt, setDigestGeneratedAt] = useState<string>('');
+  const [digestSessionId, setDigestSessionId] = useState<string>('');
   const [hideAcknowledged, setHideAcknowledged] = useState(false);
   const [showDeadlines, setShowDeadlines] = useState(false);
   const [deadlineReport, setDeadlineReport] = useState('');
@@ -293,19 +294,25 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
           model: selectedModel // Include selected AI model
         })
       });
-      
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}`);
+      }
+
       const data = await response.json();
       setAnalyses(prev => new Map(prev).set(threadId, data));
       setExpandedThread(threadId);
-      
+
       // OPTIMIZED: Update just this thread's state instead of refetching everything
-      setThreads(prev => prev.map(thread => 
-        thread.id === threadId 
+      setThreads(prev => prev.map(thread =>
+        thread.id === threadId
           ? { ...thread, state: { ...thread.state, analyzed: true } }
           : thread
       ));
     } catch (error) {
       console.error('Failed to analyze thread:', error);
+      alert(`Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setAnalyzing(false);
     }
@@ -341,6 +348,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
       const data = await response.json();
       setDigest(data.digest);
       setDigestGeneratedAt(data.generated_at || new Date().toISOString());
+      setDigestSessionId(data.session_id || ''); // Store the session ID
       setShowDigest(true);
     } catch (error) {
       console.error('Failed to get digest:', error);
@@ -716,6 +724,7 @@ export default function TriagePage({ onAddToTodo, onNavigate }: TriagePageProps)
         <DailyBriefModal
           digest={digest}
           generatedAt={digestGeneratedAt}
+          sessionId={digestSessionId}
           onClose={() => setShowDigest(false)}
         />
       )}

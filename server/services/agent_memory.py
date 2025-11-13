@@ -43,26 +43,31 @@ class AgentMemoryService:
         Returns:
             Created AgentMemory instance
         """
-        memory = AgentMemory(
-            agent_type=agent_type,
-            event_type=event_type,
-            summary=summary,
-            context_data=context_data or {},
-            key_findings=key_findings or {},
-            related_entities=related_entities or {},
-            session_id=session_id,
-            email_id=email_id,
-            task_id=task_id,
-            model_used=model_used,
-            tokens_used=tokens_used,
-            confidence_score=confidence_score
-        )
+        try:
+            memory = AgentMemory(
+                agent_type=agent_type,
+                event_type=event_type,
+                summary=summary,
+                context_data=context_data or {},
+                key_findings=key_findings or {},
+                related_entities=related_entities or {},
+                session_id=session_id,
+                email_id=email_id,
+                task_id=task_id,
+                model_used=model_used,
+                tokens_used=tokens_used,
+                confidence_score=confidence_score
+            )
 
-        db.add(memory)
-        db.commit()
-        db.refresh(memory)
+            db.add(memory)
+            db.commit()
+            db.refresh(memory)
 
-        return memory
+            return memory
+        except Exception as e:
+            db.rollback()
+            print(f"Warning: Failed to record agent memory: {e}")
+            raise
 
     @staticmethod
     def get_recent_context(

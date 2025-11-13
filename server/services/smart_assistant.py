@@ -197,13 +197,15 @@ def smart_triage(thread_id: str, model: str = "gpt-4o", db = None) -> dict:
         if db:
             try:
                 from services.email_sync import EmailSyncService
-                from datetime import datetime
+
+                # Get the latest message for caching
+                gmail_message = msgs[-1] if msgs else {}
 
                 # Cache the raw email
                 EmailSyncService.cache_email(
                     db=db,
                     thread_id=thread_id,
-                    gmail_message_id=gmail_message['id'],
+                    gmail_message_id=gmail_message.get('id', thread_id),
                     subject=thread_data[0].get('subject', ''),
                     sender=thread_data[0].get('from', ''),
                     recipients={'to': [thread_data[0].get('to', '')]},
@@ -429,67 +431,213 @@ def parse_due_date(due_text: str) -> str:
     # Default: no specific date found
     return None
 
+def get_dismissed_identifiers(db) -> set:
+    """
+    Get all currently dismissed item identifiers (email thread IDs, subjects, etc.)
+    Returns a set for fast lookups
+    """
+    if not db:
+        return set()
+
+    try:
+        from models import DismissedItem
+
+        # Get non-expired dismissed items
+        dismissed = db.query(DismissedItem).filter(
+            (DismissedItem.is_permanent == True) |
+            (DismissedItem.expires_at > datetime.now()) |
+            (DismissedItem.expires_at == None)
+        ).all()
+
+        # Return set of identifiers for fast lookups
+        return {d.identifier for d in dismissed}
+    except Exception as e:
+        print(f"Warning: Could not load dismissed items: {e}")
+        return set()
+
 def daily_digest(model: str = "gpt-4o", db = None) -> dict:
     """
-    Generate a daily digest of all important items
-    Like a morning briefing from your assistant
-    Now uses agent memory for better context!
+    Generate a comprehensive daily digest combining:
+    - Emails from last 24 hours
+    - Tasks (overdue + due today)
+    - Delegations (follow-ups needed)
+    - Calendar events for today
+    - Agent memory for enhanced context
+
+    Phase 1 Enhancement: Multi-source intelligence with modern context engineering
     """
     from .gmail import get_user_threads
     from .priority_filter import load_watch_config
     from .model_provider import ModelProvider
+    from models import Task, Delegation
 
     # Use Eastern Time for all operations
     eastern = pytz.timezone('America/New_York')
     current_time = datetime.now(eastern)
-    
+    today = current_time.date()
+
+    # Get dismissed items to filter out
+    dismissed_ids = get_dismissed_identifiers(db)
+
+    # ========== DATA SOURCE 1: TASKS ==========
+    tasks_context = {"overdue": [], "due_today": [], "high_priority": []}
+    if db:
+        try:
+            # Get overdue tasks
+            overdue_tasks = db.query(Task).filter(
+                Task.status.in_(['todo', 'in_progress']),
+                Task.due_date < today
+            ).order_by(Task.priority.desc(), Task.due_date.asc()).all()
+
+            # Get tasks due today
+            today_tasks = db.query(Task).filter(
+                Task.status.in_(['todo', 'in_progress']),
+                Task.due_date == today
+            ).order_by(Task.priority.desc()).all()
+
+            # Get high priority tasks (next 3 days)
+            next_3_days = today + timedelta(days=3)
+            high_priority_tasks = db.query(Task).filter(
+                Task.status.in_(['todo', 'in_progress']),
+                Task.priority.in_(['urgent', 'high']),
+                Task.due_date.between(today, next_3_days)
+            ).order_by(Task.due_date.asc()).limit(5).all()
+
+            tasks_context = {
+                "overdue": [{
+                    "title": t.title,
+                    "due_date": t.due_date.isoformat() if t.due_date else None,
+                    "priority": t.priority,
+                    "description": t.description,
+                    "eisenhower_quadrant": t.eisenhower_quadrant
+                } for t in overdue_tasks],
+                "due_today": [{
+                    "title": t.title,
+                    "priority": t.priority,
+                    "description": t.description,
+                    "eisenhower_quadrant": t.eisenhower_quadrant
+                } for t in today_tasks],
+                "high_priority": [{
+                    "title": t.title,
+                    "due_date": t.due_date.isoformat() if t.due_date else None,
+                    "priority": t.priority,
+                    "eisenhower_quadrant": t.eisenhower_quadrant
+                } for t in high_priority_tasks]
+            }
+        except Exception as e:
+            print(f"Warning: Could not load tasks: {e}")
+
+    # ========== DATA SOURCE 2: DELEGATIONS ==========
+    delegations_context = {"follow_ups_needed": [], "active_delegations": []}
+    if db:
+        try:
+            # Get delegations needing follow-up today
+            follow_up_delegations = db.query(Delegation).filter(
+                Delegation.status.in_(['active', 'planning']),
+                Delegation.follow_up_date == today
+            ).all()
+
+            # Get all active delegations
+            active_delegations = db.query(Delegation).filter(
+                Delegation.status == 'active'
+            ).order_by(Delegation.due_date.asc()).limit(10).all()
+
+            delegations_context = {
+                "follow_ups_needed": [{
+                    "task": d.task_description,
+                    "assigned_to": d.assigned_to,
+                    "due_date": d.due_date.isoformat() if d.due_date else None,
+                    "priority": d.priority,
+                    "progress": d.chilihead_progress
+                } for d in follow_up_delegations],
+                "active_delegations": [{
+                    "task": d.task_description,
+                    "assigned_to": d.assigned_to,
+                    "due_date": d.due_date.isoformat() if d.due_date else None,
+                    "status": d.status
+                } for d in active_delegations]
+            }
+        except Exception as e:
+            print(f"Warning: Could not load delegations: {e}")
+
+    # ========== DATA SOURCE 3: CALENDAR (placeholder for future integration) ==========
+    calendar_context = {"today_events": []}
+    # TODO: Integrate with Google Calendar API when ready
+    # For now, we'll extract calendar events from tasks with time-specific data
+
+    # ========== DATA SOURCE 4: EMAILS ==========
     # Get today's emails from watched senders
     config = load_watch_config()
-    
+
     # Build Gmail query for today's important emails
     query_parts = []
-    
+
     # Add watched senders/domains
     sender_parts = []
     for sender in config.get("priority_senders", []):
         sender_parts.append(f"from:{sender}")
     for domain in config.get("priority_domains", []):
         sender_parts.append(f"from:*@{domain}")
-    
+
     if sender_parts:
         query_parts.append(f"({' OR '.join(sender_parts)})")
-    
+
     # Add time filter - last 24 hours
     query_parts.append("newer_than:1d")
-    
+
     gmail_query = " ".join(query_parts)
-    
+
     try:
         # Get threads from last 24 hours
         threads = get_user_threads(max_results=50, query=gmail_query)
-        
+
         if not threads:
             return {
                 "digest": f"Good morning John! No urgent emails in the last 24 hours. You're all caught up for {current_time.strftime('%A, %B %d, %Y')}! ✅",
                 "generated_at": current_time.isoformat()
             }
-        
-        # Prepare email summaries for AI
+
+        # Prepare email summaries for AI, filtering out dismissed items
+        # Also check for BI portal results email and parse it
         email_summaries = []
+        filtered_count = 0
+        portal_metrics = None
+
         for thread in threads[:20]:  # Limit to 20 most recent
+            thread_id = thread.get("id", "")
             msgs = thread.get("messages", [])
             if msgs:
                 headers = {h["name"].lower(): h["value"] for h in msgs[0].get("payload", {}).get("headers", [])}
+                subject = headers.get("subject", "")
+                sender = headers.get("from", "")
+
+                # Check if this is the BI portal results email
+                from .portal_parser import PortalResultsParser
+                if PortalResultsParser.is_bi_email(sender, subject):
+                    try:
+                        portal_metrics = PortalResultsParser.process_bi_email(msgs, db)
+                        if portal_metrics:
+                            print(f"✅ Parsed portal metrics from BI email")
+                    except Exception as e:
+                        print(f"Warning: Failed to parse portal metrics: {e}")
+
+                # Skip if this thread or subject is dismissed
+                if thread_id in dismissed_ids or subject in dismissed_ids:
+                    filtered_count += 1
+                    continue
+
                 body = extract_message_body(msgs[0].get("payload", {}))
-                
+
                 email_summaries.append({
-                    "from": headers.get("from", ""),
-                    "subject": headers.get("subject", ""),
+                    "thread_id": thread_id,
+                    "from": sender,
+                    "subject": subject,
                     "date": headers.get("date", ""),
                     "snippet": body[:500]  # First 500 chars
                 })
         
-        # Get agent memory context if database provided
+        # ========== DATA SOURCE 5: ENHANCED AGENT MEMORY ==========
+        # Modern context engineering: Provide structured, hierarchical context
         agent_context = ""
         if db:
             try:
@@ -498,77 +646,194 @@ def daily_digest(model: str = "gpt-4o", db = None) -> dict:
             except Exception as e:
                 print(f"Warning: Could not load agent memory: {e}")
 
-        # Generate AI digest
+        # Add filtered count info
+        filter_note = f"\n\nNOTE: {filtered_count} emails were filtered out because John already dismissed them." if filtered_count > 0 else ""
+
+        # Format portal metrics if available
+        portal_section = ""
+        if portal_metrics:
+            from .portal_parser import PortalResultsParser
+            portal_section = f"\n\nPORTAL RESULTS (from yesterday's BI email):\n{PortalResultsParser.format_metrics_for_digest(portal_metrics)}\n"
+
+        # ========== MODERN CONTEXT ENGINEERING ==========
+        # Structure context hierarchically: Time-sensitive first, then operational, then informational
+
+        # Build priority context summary
+        priority_summary = []
+        overdue_count = len(tasks_context.get("overdue", []))
+        today_tasks_count = len(tasks_context.get("due_today", []))
+        follow_ups_count = len(delegations_context.get("follow_ups_needed", []))
+
+        if overdue_count > 0:
+            priority_summary.append(f"⚠️ {overdue_count} overdue tasks")
+        if today_tasks_count > 0:
+            priority_summary.append(f"📅 {today_tasks_count} tasks due today")
+        if follow_ups_count > 0:
+            priority_summary.append(f"👥 {follow_ups_count} delegations need follow-up")
+
+        priority_headline = " | ".join(priority_summary) if priority_summary else "All caught up!"
+
+        # Generate AI digest with enhanced multi-source prompt
         prompt = f"""
-You are AUBS (Auburn Hills Assistant) - John's executive assistant.
+You are AUBS (Auburn Hills Assistant) - John's executive COO assistant for Chili's #605.
 
 TODAY'S DATE: {current_time.strftime('%A, %B %d, %Y')}
 CURRENT TIME: {current_time.strftime('%I:%M %p ET')}
 
-CONTEXT FROM YOUR RECENT WORK:
+OPERATIONS SNAPSHOT: {priority_headline}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 YOUR TODO LIST (Tasks)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+OVERDUE TASKS ({overdue_count}):
+{json.dumps(tasks_context.get("overdue", []), indent=2) if overdue_count > 0 else "None - you're caught up!"}
+
+DUE TODAY ({today_tasks_count}):
+{json.dumps(tasks_context.get("due_today", []), indent=2) if today_tasks_count > 0 else "No tasks due today"}
+
+HIGH PRIORITY (Next 3 Days):
+{json.dumps(tasks_context.get("high_priority", []), indent=2)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👥 TEAM DELEGATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FOLLOW-UPS NEEDED TODAY ({follow_ups_count}):
+{json.dumps(delegations_context.get("follow_ups_needed", []), indent=2) if follow_ups_count > 0 else "No follow-ups needed today"}
+
+ACTIVE DELEGATIONS:
+{json.dumps(delegations_context.get("active_delegations", []), indent=2)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📧 RECENT EMAILS ({len(email_summaries)} from last 24h)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{json.dumps(email_summaries, indent=2)}{filter_note}
+
+{portal_section}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧠 AGENT MEMORY (What I've noticed recently)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {agent_context if agent_context else "(No recent agent activity to reference)"}
 
-The context above shows what you (and other AI agents) have already analyzed, flagged, or discussed.
-Use this to avoid redundancy and build on previous findings.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Review these {len(email_summaries)} emails from the last 24 hours and create a morning operations brief.
+YOUR TASK:
+Create a comprehensive morning operations brief that INTEGRATES all sources above.
 
-EMAILS:
-{json.dumps(email_summaries, indent=2)}
+Structure your brief like this:
 
-Create a brief that includes:
+## 🌶️ Good Morning John - {current_time.strftime('%A, %B %d')}
 
-🔴 URGENT ITEMS (needs action TODAY - like payroll issues, coverage needed, deadlines in <24hrs)
-🟡 TODAY'S DEADLINES (specific tasks due today with times)
-📊 PATTERNS I'VE NOTICED (recurring issues, trends)
-💡 SUGGESTIONS (proactive advice)
+### 📊 PORTAL RESULTS
+[If portal metrics provided, highlight key metrics and trends]
 
-Be specific, conversational, and helpful. Include details like:
-- Who to contact and how
-- When things are due
-- Why it matters
-- What happens if ignored
+### 🔴 URGENT ACTION NEEDED TODAY
+[Combine: Overdue tasks + Today's deadlines + Critical emails + Follow-ups needed]
+- Be specific: WHO needs to be contacted, WHAT needs to happen, WHEN it's due
+- Include phone numbers, portal links, specific deadlines
+- Cross-reference tasks with emails (e.g., "You have a task to call payroll, and there's also an email about Hannah's pay card")
 
-If there are no urgent items, say so clearly. Don't make up fake issues.
+### 🟡 TODAY'S DEADLINES & TIME-BLOCKS
+[List everything due today with specific times]
+- Suggest when to tackle each item based on typical restaurant schedule
+- Example: "Best time for paperwork: 2-4pm (between lunch/dinner rush)"
+
+### 👥 TEAM CHECK-INS NEEDED
+[Delegations follow-ups + any email mentions of team members]
+- Who to follow up with and about what
+- Progress on delegations
+
+### 📈 PATTERNS & INSIGHTS
+[What trends do you notice across tasks, emails, delegations?]
+- Recurring issues (e.g., "3rd time this week someone called off for dinner shift")
+- Bottlenecks in delegation progress
+- Unusual metrics in portal
+
+### 💡 PROACTIVE SUGGESTIONS
+[What should John do to get ahead?]
+- Suggest 2-3 proactive actions based on patterns
+- Time-saving tips
+
+### ✅ WINS & PROGRESS
+[Acknowledge completed tasks, positive trends, good news from emails]
+
+IMPORTANT:
+- Don't just list items separately - INTEGRATE them (connect emails to tasks to delegations)
+- Be conversational but direct (AUBS voice: "Here's the deal...")
+- If something is truly urgent, say so clearly
+- If there are no urgent items, celebrate that!
+- Include specific action steps with WHO/WHAT/WHEN details
 """
 
         messages = [
-            {"role": "system", "content": "You are AUBS - Auburn Hills Assistant. You are an intelligent executive assistant who understands context and priorities."},
+            {"role": "system", "content": "You are AUBS - Auburn Hills Assistant. You synthesize multi-source operational data into actionable intelligence. You understand restaurant operations, prioritize based on urgency and impact, and provide context-aware recommendations."},
             {"role": "user", "content": prompt}
         ]
 
+        # Fix timeout issue: Increase from default (likely 30s) to 120s for GPT-5
         digest_text = ModelProvider.chat_completion_sync(
             messages=messages,
             model=model,
             temperature=0.3,
-            max_tokens=3000  # Increased from 1000 for more detailed output
+            max_tokens=4000,  # Increased for comprehensive multi-source digest
+            timeout=120  # 120 seconds to handle GPT-5 slowness
         )
 
-        # Record digest generation to agent memory
+        # Record digest generation to agent memory with comprehensive context
         if db:
             try:
                 from services.agent_memory import AgentMemoryService
 
-                # Extract key findings from digest text
+                # Extract key findings from digest text and data sources
                 key_findings = {
                     'emails_analyzed': len(email_summaries),
+                    'overdue_tasks_count': overdue_count,
+                    'today_tasks_count': today_tasks_count,
+                    'delegations_follow_ups': follow_ups_count,
                     'has_urgent': '🔴' in digest_text or 'URGENT' in digest_text.upper(),
-                    'has_deadlines': '🟡' in digest_text or 'DEADLINE' in digest_text.upper()
+                    'has_deadlines': '🟡' in digest_text or 'DEADLINE' in digest_text.upper(),
+                    'has_portal_metrics': portal_metrics is not None,
+                    'priority_headline': priority_headline
+                }
+
+                # Build comprehensive context data for future agents
+                context_data = {
+                    'digest_preview': digest_text[:800],  # More preview text
+                    'email_count': len(email_summaries),
+                    'tasks_summary': {
+                        'overdue': overdue_count,
+                        'due_today': today_tasks_count,
+                        'high_priority': len(tasks_context.get("high_priority", []))
+                    },
+                    'delegations_summary': {
+                        'follow_ups_needed': follow_ups_count,
+                        'active_count': len(delegations_context.get("active_delegations", []))
+                    },
+                    'generated_time': current_time.strftime('%I:%M %p ET'),
+                    'generated_date': current_time.strftime('%Y-%m-%d'),
+                    'model_used': model
+                }
+
+                # Extract people and deadlines for entity tracking
+                related_entities = {
+                    'people': [d['assigned_to'] for d in delegations_context.get("follow_ups_needed", []) if d.get('assigned_to')],
+                    'emails': [e['thread_id'] for e in email_summaries[:10]],  # Track top 10 emails
+                    'tasks': [],  # Will be populated from task IDs if needed
+                    'deadlines': [t['due_date'] for t in tasks_context.get("due_today", []) if t.get('due_date')]
                 }
 
                 AgentMemoryService.record_event(
                     db=db,
                     agent_type='daily_brief',
                     event_type='digest_generated',
-                    summary=f"Generated daily digest analyzing {len(email_summaries)} emails",
-                    context_data={
-                        'digest_preview': digest_text[:500],
-                        'email_count': len(email_summaries),
-                        'generated_time': current_time.strftime('%I:%M %p ET')
-                    },
+                    summary=f"Generated comprehensive daily digest: {priority_headline}",
+                    context_data=context_data,
                     key_findings=key_findings,
+                    related_entities=related_entities,
                     model_used=model,
-                    confidence_score=90
+                    confidence_score=95  # Higher confidence with multi-source data
                 )
             except Exception as mem_error:
                 print(f"Warning: Failed to record digest to agent memory: {mem_error}")
@@ -576,7 +841,17 @@ If there are no urgent items, say so clearly. Don't make up fake issues.
         return {
             "digest": digest_text,
             "generated_at": current_time.isoformat(),
-            "emails_analyzed": len(email_summaries)
+            "emails_analyzed": len(email_summaries),
+            "data_sources": {
+                "overdue_tasks": overdue_count,
+                "today_tasks": today_tasks_count,
+                "high_priority_tasks": len(tasks_context.get("high_priority", [])),
+                "delegations_follow_ups": follow_ups_count,
+                "active_delegations": len(delegations_context.get("active_delegations", [])),
+                "emails": len(email_summaries),
+                "portal_metrics": portal_metrics is not None
+            },
+            "priority_headline": priority_headline
         }
         
     except Exception as e:

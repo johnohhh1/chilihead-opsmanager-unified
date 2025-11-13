@@ -89,33 +89,37 @@ class ModelProvider:
         messages: List[Dict],
         model: str = "gpt-4o",
         temperature: float = 0.7,
-        max_tokens: int = 1000
+        max_tokens: int = 1000,
+        timeout: int = 60
     ) -> str:
         """
         SYNC Unified chat completion interface
         Automatically routes to OpenAI or Ollama based on model name
+
+        Args:
+            timeout: Timeout in seconds (default 60s)
         """
-        
-        print(f"[ModelProvider] Routing model '{model}' to provider...")
+
+        print(f"[ModelProvider] Routing model '{model}' to provider (timeout={timeout}s)...")
 
         # Determine provider based on model name
         # OpenAI models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, etc.
         # BUT NOT: gpt-oss, gpt-neox, etc. (these are local Ollama models)
         openai_models = ["gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o1-preview", "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
-        
+
         # Check if it's an actual OpenAI model
         is_openai = any(model.startswith(prefix) for prefix in openai_models)
-        
+
         # Special case: gpt-oss and gpt-neox are Ollama models
         if "gpt-oss" in model or "gpt-neox" in model:
             is_openai = False
-        
+
         if is_openai:
             print(f"[ModelProvider] Sending '{model}' to OpenAI")
-            return ModelProvider._openai_completion_sync(messages, model, temperature, max_tokens)
+            return ModelProvider._openai_completion_sync(messages, model, temperature, max_tokens, timeout)
         else:
             print(f"[ModelProvider] Sending '{model}' to Ollama")
-            return ModelProvider._ollama_completion_sync(messages, model, temperature, max_tokens)
+            return ModelProvider._ollama_completion_sync(messages, model, temperature, max_tokens, timeout)
 
     @staticmethod
     async def chat_completion(
@@ -155,7 +159,8 @@ class ModelProvider:
         messages: List[Dict],
         model: str,
         temperature: float,
-        max_tokens: int
+        max_tokens: int,
+        timeout: int = 60
     ) -> str:
         """OpenAI completion (SYNC) - GPT-5 and GPT-4 both use chat/completions"""
         config = ModelProvider.get_openai_config()
@@ -177,7 +182,7 @@ class ModelProvider:
             "model": model,
             "messages": messages,
         }
-        
+
         # GPT-5 models have specific requirements
         if model.startswith("gpt-5") or model.startswith("o1") or model.startswith("o3"):
             payload["max_completion_tokens"] = max_tokens
@@ -187,7 +192,7 @@ class ModelProvider:
             payload["max_tokens"] = max_tokens
             payload["temperature"] = temperature
 
-        with httpx.Client(base_url=config["base_url"], timeout=60) as client:
+        with httpx.Client(base_url=config["base_url"], timeout=timeout) as client:
             try:
                 response = client.post("/chat/completions", headers=headers, json=payload)
                 response.raise_for_status()
@@ -255,11 +260,12 @@ class ModelProvider:
         messages: List[Dict],
         model: str,
         temperature: float,
-        max_tokens: int
+        max_tokens: int,
+        timeout: int = 120
     ) -> str:
         """Ollama completion (SYNC)"""
         config = ModelProvider.get_ollama_config()
-        
+
         # Make a copy of messages to avoid modifying the original
         messages = messages.copy()
 
@@ -267,7 +273,7 @@ class ModelProvider:
         if "oss" in model.lower() or "gpt-oss" in model.lower():
             # Check if there's already a system message
             has_system = any(msg.get("role") == "system" for msg in messages)
-            
+
             if has_system:
                 # Append to existing system message
                 for i, msg in enumerate(messages):
@@ -280,7 +286,7 @@ class ModelProvider:
             else:
                 # Add new system message at the beginning
                 messages.insert(0, {
-                    "role": "system", 
+                    "role": "system",
                     "content": "IMPORTANT: Provide ONLY the final answer without showing your thinking process, internal monologue, or reasoning steps. Be direct and concise."
                 })
 
@@ -294,7 +300,7 @@ class ModelProvider:
             }
         }
 
-        with httpx.Client(timeout=120) as client:
+        with httpx.Client(timeout=timeout) as client:
             response = client.post(
                 f"{config['base_url']}/api/chat",
                 json=payload
