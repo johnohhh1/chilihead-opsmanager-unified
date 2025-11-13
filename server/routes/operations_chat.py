@@ -102,40 +102,54 @@ Keep responses concise but complete. If you don't have specific info, say so and
 def get_recent_emails_context(db: Session, limit: int = 20) -> str:
     """
     Fetch recent emails from database for chatbot context
+    Uses EmailCache and EmailAnalysisCache for comprehensive context
     """
-    from models import EmailState
+    from models import EmailCache, EmailAnalysisCache
     from datetime import datetime, timedelta
-    
+
     # Get emails from last 48 hours
     cutoff = datetime.now() - timedelta(hours=48)
-    
-    recent_emails = db.query(EmailState).filter(
-        EmailState.received_at >= cutoff
-    ).order_by(EmailState.received_at.desc()).limit(limit).all()
-    
+
+    recent_emails = db.query(EmailCache).filter(
+        EmailCache.received_at >= cutoff
+    ).order_by(EmailCache.received_at.desc()).limit(limit).all()
+
     if not recent_emails:
         return "No recent emails in database."
-    
+
     email_context = f"RECENT EMAILS (Last 48 hours, {len(recent_emails)} emails):\n\n"
-    
+
     for email in recent_emails:
         email_context += f"---\n"
         email_context += f"FROM: {email.sender}\n"
         email_context += f"SUBJECT: {email.subject}\n"
         if email.received_at:
             email_context += f"RECEIVED: {email.received_at.strftime('%b %d, %I:%M %p')}\n"
-        
+
+        # Add email body preview
+        if email.body_text:
+            preview = email.body_text[:200].replace('\n', ' ').strip()
+            email_context += f"PREVIEW: {preview}...\n"
+
         # Add AI analysis if available
-        if email.ai_analysis:
-            # ai_analysis is JSON, get the summary or analysis field
-            analysis = email.ai_analysis
+        analysis_cache = db.query(EmailAnalysisCache).filter(
+            EmailAnalysisCache.thread_id == email.thread_id
+        ).first()
+
+        if analysis_cache and analysis_cache.analysis_json:
+            analysis = analysis_cache.analysis_json
             if isinstance(analysis, dict):
-                summary = analysis.get('summary', analysis.get('analysis', ''))
-                if summary:
-                    email_context += f"ANALYSIS: {str(summary)[:300]}...\n"
-        
+                # Try to get the analysis text
+                analysis_text = analysis.get('analysis', '')
+                if analysis_text:
+                    email_context += f"AI ANALYSIS: {str(analysis_text)[:300]}...\n"
+
+                # Add priority and category
+                if analysis_cache.priority_score:
+                    email_context += f"PRIORITY: {analysis_cache.priority_score}/100 ({analysis_cache.category})\n"
+
         email_context += "\n"
-    
+
     return email_context
 
 @router.post("/api/operations-chat")

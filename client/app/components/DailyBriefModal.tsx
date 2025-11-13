@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { X, MessageSquare, Sparkles } from 'lucide-react';
+import { X, MessageSquare, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
 
 interface Message {
   role: "user" | "assistant";
@@ -14,16 +14,21 @@ interface Message {
 interface DailyBriefModalProps {
   digest: string;
   generatedAt?: string;
+  sessionId?: string;
   onClose: () => void;
 }
 
-export default function DailyBriefModal({ digest, generatedAt, onClose }: DailyBriefModalProps) {
+export default function DailyBriefModal({ digest, generatedAt, sessionId: initialSessionId, onClose }: DailyBriefModalProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
   const [selectedModel, setSelectedModel] = useState<string>("gpt-4o");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(50); // percentage
+  const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -103,9 +108,44 @@ export default function DailyBriefModal({ digest, generatedAt, onClose }: DailyB
     }
   };
 
+  // Handle dragging the divider
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !containerRef.current) return;
+
+      const container = containerRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+
+      // Constrain between 30% and 70%
+      if (newWidth >= 30 && newWidth <= 70) {
+        setLeftPanelWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg shadow-2xl max-w-7xl w-full h-[90vh] flex flex-col border border-gray-700">
+      <div className={`bg-gray-800 rounded-lg shadow-2xl ${isFullscreen ? 'w-full h-full' : 'max-w-7xl w-full h-[90vh]'} flex flex-col border border-gray-700 transition-all duration-200`}>
 
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-700 to-blue-600 text-white p-6 rounded-t-lg flex justify-between items-center border-b border-blue-500">
@@ -118,34 +158,54 @@ export default function DailyBriefModal({ digest, generatedAt, onClose }: DailyB
               {generatedAt ? `Generated ${new Date(generatedAt).toLocaleTimeString()}` : 'Morning brief'} — Chat with AUBS about your priorities
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="hover:bg-blue-600 rounded-lg p-2 transition-colors"
-            title="Close"
-          >
-            <X className="h-6 w-6" />
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="hover:bg-blue-600 rounded-lg p-2 transition-colors"
+              title={isFullscreen ? "Restore size" : "Maximize"}
+            >
+              {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+            </button>
+            <button
+              onClick={onClose}
+              className="hover:bg-blue-600 rounded-lg p-2 transition-colors"
+              title="Close"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
         </div>
 
         {/* Split Panel Layout */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden" ref={containerRef}>
 
           {/* Left Panel - Brief Content */}
-          <div className="w-1/2 border-r border-gray-700 overflow-y-auto p-6 bg-gray-900">
+          <div
+            className="overflow-y-auto p-8 bg-gray-900"
+            style={{ width: `${leftPanelWidth}%` }}
+          >
             <div className="prose prose-invert max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  h1: ({ children }) => <h1 className="text-2xl font-bold text-white mb-4">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-xl font-semibold text-white mt-6 mb-3">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-lg font-medium text-gray-200 mt-4 mb-2">{children}</h3>,
-                  p: ({ children }) => <p className="text-gray-300 mb-3 leading-relaxed">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc list-inside text-gray-300 space-y-1 mb-4">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal list-inside text-gray-300 space-y-1 mb-4">{children}</ol>,
-                  li: ({ children }) => <li className="text-gray-300">{children}</li>,
-                  strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
-                  code: ({ children }) => <code className="bg-gray-800 text-red-400 px-1 py-0.5 rounded text-sm">{children}</code>,
-                  a: ({ href, children }) => <a href={href} className="text-blue-400 hover:text-blue-300 underline">{children}</a>,
+                  h1: ({ children }) => <h1 className="text-3xl font-bold text-white mb-5 tracking-wide">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-2xl font-bold text-white mt-8 mb-4 tracking-wide">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-xl font-semibold text-white mt-6 mb-3 tracking-wide">{children}</h3>,
+                  h4: ({ children }) => <h4 className="text-lg font-semibold text-white mt-4 mb-2">{children}</h4>,
+                  p: ({ children }) => <p className="text-white mb-4 leading-loose text-base">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc list-outside ml-6 text-white space-y-2 mb-5">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal list-outside ml-6 text-white space-y-2 mb-5">{children}</ol>,
+                  li: ({ children }) => <li className="text-white leading-relaxed">{children}</li>,
+                  strong: ({ children }) => <strong className="text-yellow-300 font-bold">{children}</strong>,
+                  code: ({ children }) => <code className="bg-gray-800 text-emerald-400 px-2 py-1 rounded text-sm font-mono">{children}</code>,
+                  a: ({ href, children }) => <a href={href} className="text-blue-400 hover:text-blue-300 underline font-medium">{children}</a>,
+                  em: ({ children }) => <em className="text-gray-300 italic">{children}</em>,
+                  table: ({ children }) => <table className="w-full border-collapse border border-gray-600 my-4 text-white">{children}</table>,
+                  thead: ({ children }) => <thead className="bg-gray-700">{children}</thead>,
+                  tbody: ({ children }) => <tbody>{children}</tbody>,
+                  tr: ({ children }) => <tr className="border-b border-gray-600">{children}</tr>,
+                  th: ({ children }) => <th className="border border-gray-600 px-4 py-2 text-left font-bold text-white">{children}</th>,
+                  td: ({ children }) => <td className="border border-gray-600 px-4 py-2 text-white">{children}</td>,
                 }}
               >
                 {digest || "No digest available"}
@@ -153,8 +213,17 @@ export default function DailyBriefModal({ digest, generatedAt, onClose }: DailyB
             </div>
           </div>
 
+          {/* Draggable Divider */}
+          <div
+            className={`w-1 bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors ${isDragging ? 'bg-blue-500' : ''}`}
+            onMouseDown={handleMouseDown}
+          />
+
           {/* Right Panel - Chat with AUBS */}
-          <div className="w-1/2 flex flex-col bg-gray-800">
+          <div
+            className="flex flex-col bg-gray-800"
+            style={{ width: `${100 - leftPanelWidth}%` }}
+          >
 
             {/* Chat Header */}
             <div className="bg-gray-700 p-4 border-b border-gray-600">
