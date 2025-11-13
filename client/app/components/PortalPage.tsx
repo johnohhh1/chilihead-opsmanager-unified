@@ -24,6 +24,8 @@ interface PortalData {
   extracted_at?: string;
   metrics?: MetricData;
   error?: string;
+  cached?: boolean;
+  warning?: string;
 }
 
 interface MetricCardProps {
@@ -70,11 +72,14 @@ export default function PortalPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError('');
-      const response = await fetch('/api/backend/portal-dashboard');
+      const endpoint = forceRefresh
+        ? '/api/backend/portal-dashboard?force_refresh=true'
+        : '/api/backend/portal-dashboard';
+      const response = await fetch(endpoint);
       const data = await response.json();
 
       if (data.success) {
@@ -106,6 +111,16 @@ export default function PortalPage() {
               Last updated: {new Date(portalData.extracted_at).toLocaleString()}
             </p>
           )}
+          {portalData?.email_date && (
+            <p className="text-sm text-gray-400">
+              Email date: {portalData.email_date}
+            </p>
+          )}
+          {portalData?.cached && (
+            <p className="text-sm text-yellow-400 mt-1">
+              Showing cached metrics. Use Refresh Metrics to analyze the latest RAP Mobile email.
+            </p>
+          )}
         </div>
       </div>
 
@@ -114,7 +129,7 @@ export default function PortalPage() {
         {/* Refresh Button */}
         <div className="mb-6 flex justify-end">
           <button
-            onClick={fetchMetrics}
+            onClick={() => fetchMetrics(true)}
             disabled={loading}
             className="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2 font-semibold"
           >
@@ -148,11 +163,17 @@ export default function PortalPage() {
           <div className="bg-red-900/20 border border-red-600 rounded-lg p-6 text-center">
             <p className="text-red-400 text-lg">{error}</p>
             <button
-              onClick={fetchMetrics}
+              onClick={() => fetchMetrics()}
               className="mt-4 px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
             >
               Retry
             </button>
+          </div>
+        )}
+
+        {portalData?.warning && !error && (
+          <div className="bg-yellow-900/30 border border-yellow-500 text-yellow-200 rounded-lg p-4 mb-6">
+            {portalData.warning}
           </div>
         )}
 
@@ -230,7 +251,8 @@ export default function PortalPage() {
         <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
           <p className="text-sm text-gray-400">
             <span className="font-semibold text-gray-300">Note:</span> Metrics are automatically extracted from your
-            daily RAP Mobile email using AI vision. Click "Refresh Metrics" to pull the latest data.
+            daily RAP Mobile email using AI vision. Click "Refresh Metrics" to force a new parse of the most recent email
+            if numbers look outdated.
           </p>
         </div>
       </div>
