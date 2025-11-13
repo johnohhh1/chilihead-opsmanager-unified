@@ -79,11 +79,21 @@ SCOPE & ANALYSIS WINDOWS:
 3. Vendors/Alerts (last 24 hours): Securitas, Cintas, Oracle, Fourth
 4. RAP Mobile/Tableau Reports: Analyze dashboard images for KPI trends, issues, and opportunities
 
-**IMPORTANT: If you see images (especially from RAP Mobile/Tableau):**
-- Analyze charts, tables, and KPIs carefully
-- Call out concerning trends (sales drops, labor spikes, waste increases)
-- Identify opportunities (high performers, efficiency gains)
-- Convert visual data into actionable insights
+**CRITICAL: RAP Mobile Dashboard Image Analysis**
+When you see dashboard images (RAP Mobile, Tableau), you MUST:
+1. **READ ALL VISIBLE METRICS** - Extract exact numbers, percentages, dollar amounts
+2. **COMPARE TO TARGETS** - Green vs Red indicators, variance percentages
+3. **IDENTIFY TRENDS** - Week-over-week, day-over-day, period comparisons
+4. **EXTRACT TABLE DATA** - Read all rows/columns in data tables
+5. **REPORT SPECIFIC NUMBERS** - Don't say "sales are down", say "Sales: $15,234 (-8.2% vs target)"
+
+Examples of what to extract:
+- Sales metrics (actual vs budget, variance %)
+- Labor percentages (actual vs target)
+- Food/beverage costs (COGS %)
+- Guest counts and check averages
+- Waste amounts and percentages
+- Any red/yellow/green indicators and what they mean
 
 EXTRACTION REQUIREMENTS:
 
@@ -101,11 +111,18 @@ For Deadlines/Deliverables:
 - TIME ESTIMATE (how long this will take)
 
 For Dashboard/Report Analysis (RAP Mobile, Tableau, etc.):
-- KEY METRICS: What numbers stand out (good or bad)
-- TRENDS: Week-over-week, day-over-day changes
-- RED FLAGS: Problem areas needing immediate attention
-- OPPORTUNITIES: Areas performing well or opportunities to improve
-- CONTEXT: Compare to goals, benchmarks, or historical performance
+YOU MUST EXTRACT AND REPORT ACTUAL NUMBERS FROM IMAGES:
+- **SALES METRICS**: Actual $ amount, Budget/Target $, Variance % and $, Period comparison
+- **LABOR METRICS**: Labor % actual vs target, dollar amounts, variance
+- **FOOD COST**: Food cost %, beverage cost %, COGS actual vs target
+- **GUEST METRICS**: Guest count, check average, per-person-average
+- **OPERATIONAL METRICS**: Waste $, comps %, voids %, any other visible KPIs
+- **TRENDS**: Read trend arrows, percentage changes, period-over-period data
+- **STATUS INDICATORS**: What's green (good), yellow (warning), red (problem)
+- **TABLE DATA**: Extract all visible rows and columns from data tables
+
+Format: "Metric Name: $X,XXX (Target: $Y,YYY, Variance: +/-Z%)"
+Example: "Net Sales: $47,892 (Budget: $52,000, -7.9% unfavorable)"
 
 For Action Items:
 - SPECIFIC ACTION (not vague - what exactly must John do)
@@ -127,10 +144,16 @@ Provide a comprehensive analysis with:
    - Recommended actions (AUBS style)
 
 3. 📊 DASHBOARD INSIGHTS (if images present)
-   - Key metrics and trends from visual data
-   - Performance against targets
-   - Red flags and opportunities
-   - Specific recommendations based on numbers
+   **YOU MUST REPORT ACTUAL NUMBERS FROM THE IMAGE**
+   - Sales Performance: [Extract exact $ amounts, targets, variances]
+   - Labor Performance: [Extract exact % and $ amounts vs targets]
+   - Food/Bev Cost: [Extract COGS %, actual vs target]
+   - Guest Metrics: [Extract counts, averages, trends]
+   - Other KPIs: [Any other visible metrics from the dashboard]
+   - Red Flags: [Specific metrics that are off-target with numbers]
+   - Opportunities: [Specific metrics performing well with numbers]
+
+   DO NOT be vague - say "Sales: $47,892 (-7.9%)" not "sales are down"
 
 4. 📅 DEADLINES & SUBMISSIONS
    - Table format with columns: Item | Due Date | Time Needed | Status

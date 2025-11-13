@@ -1,5 +1,5 @@
 """SQLAlchemy database models for OpenInbox OpsManager AI"""
-from sqlalchemy import Column, String, Text, Boolean, DateTime, Date, Integer, JSON, CheckConstraint
+from sqlalchemy import Column, String, Text, Boolean, DateTime, Date, Integer, JSON, CheckConstraint, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -291,6 +291,43 @@ class PortalMetrics(Base):
     email_subject = Column(String(500))
     parsed_at = Column(DateTime, default=func.now())
     created_at = Column(DateTime, default=func.now())
+
+
+class PortalDashboardMetrics(Base):
+    """Structured RAP Mobile dashboard metrics extracted via vision AI"""
+    __tablename__ = 'portal_dashboard_metrics'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    email_thread_id = Column(String(255), index=True)
+    email_message_id = Column(String(255), index=True)
+    email_date = Column(String(255))
+
+    # Sales & plan metrics
+    comp_sales_day = Column(Float)
+    comp_sales_ptd = Column(Float)
+    comp_sales_vs_plan_ptd = Column(Float)
+
+    # Dine in GWAP
+    dine_in_gwap_day = Column(Float)
+    dine_in_gwap_ltd = Column(Float)
+    dine_in_gwap_r4w = Column(Float)
+
+    # To go GWAP
+    to_go_gwap_day = Column(Float)
+    to_go_gwap_ltd = Column(Float)
+    to_go_gwap_r4w = Column(Float)
+
+    # Operations metrics
+    labor_percent = Column(Float)
+    guest_satisfaction = Column(Float)
+    food_cost = Column(Float)
+    speed_of_service = Column(Float)
+
+    # Full JSON payload for future metrics
+    metrics_json = Column(JSON)
+
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
 class EmailAttachment(Base):

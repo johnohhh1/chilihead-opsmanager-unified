@@ -352,24 +352,81 @@ async def parse_portal_email(thread_id: str = None, db: Session = Depends(get_db
         raise HTTPException(500, f"Error parsing portal email: {str(e)}")
 
 @app.get("/api/portal-dashboard")
-async def get_portal_dashboard(db: Session = Depends(get_db)):
+async def get_portal_dashboard(force_refresh: bool = False, db: Session = Depends(get_db)):
     """
-    Extract metrics from RAP Mobile dashboard using vision AI
-    Returns structured metric data for display in custom dashboard
+    Extract metrics from RAP Mobile dashboard using vision AI.
+    Returns structured metric data for display in the custom dashboard.
     """
+    cached_metric = None
+
+    def serialize_metric(record, from_cache: bool = False, warning: str = None):
+        """Convert a PortalDashboardMetrics record into API response format"""
+        from datetime import datetime as dt
+
+        metrics_payload = record.metrics_json or {
+            "comp_sales_day": record.comp_sales_day,
+            "comp_sales_ptd": record.comp_sales_ptd,
+            "comp_sales_vs_plan_ptd": record.comp_sales_vs_plan_ptd,
+            "dine_in_gwap_day": record.dine_in_gwap_day,
+            "dine_in_gwap_ltd": record.dine_in_gwap_ltd,
+            "dine_in_gwap_r4w": record.dine_in_gwap_r4w,
+            "to_go_gwap_day": record.to_go_gwap_day,
+            "to_go_gwap_ltd": record.to_go_gwap_ltd,
+            "to_go_gwap_r4w": record.to_go_gwap_r4w,
+            "labor_percent": record.labor_percent,
+            "guest_satisfaction": record.guest_satisfaction,
+            "food_cost": record.food_cost,
+            "speed_of_service": record.speed_of_service,
+        }
+
+        response = {
+            "success": True,
+            "email_date": record.email_date,
+            "extracted_at": (record.created_at or dt.utcnow()).isoformat(),
+            "metrics": metrics_payload,
+            "cached": from_cache,
+        }
+
+        if warning:
+            response["warning"] = warning
+
+        return response
+
     try:
         from services.gmail import get_user_threads, get_service
         from services.ai_triage import extract_attachments_with_images
-        from models import PortalMetrics
+        from models import PortalDashboardMetrics
         import base64
         import httpx
+        import json
         from datetime import datetime
+        from pathlib import Path
 
-        # Search for RAP Mobile email
-        threads = get_user_threads(max_results=1, query='subject:"RAP Mobile"')
+        # Return cached metrics unless refresh requested
+        cached_metric = db.query(PortalDashboardMetrics).order_by(PortalDashboardMetrics.created_at.desc()).first()
+        CACHE_TTL_HOURS = 6
+        if cached_metric and not force_refresh:
+            metric_timestamp = cached_metric.updated_at or cached_metric.created_at
+            if metric_timestamp:
+                age_seconds = (datetime.utcnow() - metric_timestamp).total_seconds()
+                if age_seconds <= CACHE_TTL_HOURS * 3600:
+                    return serialize_metric(cached_metric, from_cache=True)
+
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            warning = "OPENAI_API_KEY not configured"
+            if cached_metric:
+                return serialize_metric(cached_metric, from_cache=True, warning=warning)
+            raise HTTPException(500, warning)
+
+        # Search for RAP Mobile email (last 24h to avoid stale screenshots)
+        threads = get_user_threads(max_results=1, query='subject:"RAP Mobile" newer_than:2d')
 
         if not threads:
-            return {"success": False, "error": "No RAP Mobile email found"}
+            warning = "No RAP Mobile email found in last 48 hours"
+            if cached_metric:
+                return serialize_metric(cached_metric, from_cache=True, warning=warning)
+            return {"success": False, "error": warning}
 
         msg = threads[0].get('messages', [{}])[0]
         msg_id = msg.get('id')
@@ -377,27 +434,28 @@ async def get_portal_dashboard(db: Session = Depends(get_db)):
         headers = {h['name'].lower(): h['value']
                   for h in msg.get('payload', {}).get('headers', [])}
 
-        # Get email date
         email_date = headers.get('date', 'Unknown date')
 
         # Extract images
-        body, images = extract_attachments_with_images(msg.get('payload', {}))
+        _, images = extract_attachments_with_images(msg.get('payload', {}))
 
         if not images:
-            return {"success": False, "error": "No images found in RAP Mobile email"}
+            warning = "No images found in RAP Mobile email"
+            if cached_metric:
+                return serialize_metric(cached_metric, from_cache=True, warning=warning)
+            return {"success": False, "error": warning}
 
         # Find the RAP Mobile dashboard image
         dashboard_image = None
         for img in images:
-            filename = img.get('filename', '').lower()
-            if 'rap mobile' in filename or 'rap_mobile' in filename:
+            filename = (img.get('filename') or '').lower()
+            if 'rap mobile' in filename or 'rap_mobile' in filename or 'dashboard' in filename:
                 dashboard_image = img
                 break
 
         if not dashboard_image:
             dashboard_image = images[0]
 
-        # Get image data
         image_data = dashboard_image.get('data')
 
         # If not inline, download attachment
@@ -411,13 +469,10 @@ async def get_portal_dashboard(db: Session = Depends(get_db)):
             image_data = attachment.get('data')
 
         if not image_data:
-            return {"success": False, "error": "Could not retrieve dashboard image"}
-
-        # Save image to temp file
-        import base64
-        import tempfile
-        import json
-        from pathlib import Path
+            warning = "Could not retrieve dashboard image from RAP Mobile email"
+            if cached_metric:
+                return serialize_metric(cached_metric, from_cache=True, warning=warning)
+            return {"success": False, "error": warning}
 
         # Decode base64 (Gmail uses URL-safe base64)
         image_data_clean = image_data.replace('-', '+').replace('_', '/')
@@ -432,9 +487,6 @@ async def get_portal_dashboard(db: Session = Depends(get_db)):
         temp_dir.mkdir(exist_ok=True)
         image_path = temp_dir / "rap_mobile_dashboard.png"
         image_path.write_bytes(image_bytes)
-
-        # Use OpenAI Vision API with file upload
-        openai_key = os.getenv("OPENAI_API_KEY")
 
         vision_prompt = """Extract ALL numeric metrics from this RAP Mobile restaurant dashboard.
 
@@ -458,7 +510,6 @@ Return ONLY a JSON object (no markdown):
 Use null if metric not visible. Extract percentages as decimals (e.g., -30.1% becomes -30.1)."""
 
         async with httpx.AsyncClient(timeout=60.0) as client:
-            # Read image file
             with open(image_path, 'rb') as f:
                 img_b64 = base64.b64encode(f.read()).decode('utf-8')
 
@@ -488,13 +539,18 @@ Use null if metric not visible. Extract percentages as decimals (e.g., -30.1% be
                 }
             )
 
-            if response.status_code != 200:
-                error_detail = response.text
-                print(f"OpenAI Error: {error_detail}")
-                raise HTTPException(500, f"OpenAI API error: {error_detail[:200]}")
+        # Clean up temp file
+        try:
+            image_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
-            result = response.json()
+        if response.status_code != 200:
+            error_detail = response.text
+            print(f"OpenAI Error: {error_detail}")
+            raise HTTPException(500, f"OpenAI API error: {error_detail[:200]}")
 
+        result = response.json()
         extracted_text = result['choices'][0]['message']['content'].strip()
 
         # Parse JSON
@@ -505,9 +561,9 @@ Use null if metric not visible. Extract percentages as decimals (e.g., -30.1% be
 
         metrics_data = json.loads(extracted_text.strip())
 
-        # Store in database
-        portal_metric = PortalMetrics(
+        portal_metric = PortalDashboardMetrics(
             email_thread_id=thread_id,
+            email_message_id=msg_id,
             email_date=email_date,
             comp_sales_day=metrics_data.get('comp_sales_day'),
             comp_sales_ptd=metrics_data.get('comp_sales_ptd'),
@@ -522,25 +578,38 @@ Use null if metric not visible. Extract percentages as decimals (e.g., -30.1% be
             guest_satisfaction=metrics_data.get('guest_satisfaction'),
             food_cost=metrics_data.get('food_cost'),
             speed_of_service=metrics_data.get('speed_of_service'),
-            raw_image_data=None  # Don't store large binary data
+            metrics_json=metrics_data
         )
 
         db.add(portal_metric)
         db.commit()
         db.refresh(portal_metric)
 
-        return {
-            "success": True,
-            "email_date": email_date,
-            "extracted_at": datetime.now().isoformat(),
-            "metrics": metrics_data
-        }
+        # Clean up older entries (keep last 5 snapshots)
+        try:
+            old_ids = [
+                row.id for row in db.query(PortalDashboardMetrics.id)
+                .order_by(PortalDashboardMetrics.created_at.desc())
+                .offset(5).all()
+            ]
+            if old_ids:
+                db.query(PortalDashboardMetrics).filter(
+                    PortalDashboardMetrics.id.in_(old_ids)
+                ).delete(synchronize_session=False)
+                db.commit()
+        except Exception:
+            db.rollback()
+
+        return serialize_metric(portal_metric)
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(500, f"Error extracting metrics: {str(e)}")
+        warning = f"Error extracting metrics: {str(e)}"
+        if cached_metric:
+            return serialize_metric(cached_metric, from_cache=True, warning=warning)
+        raise HTTPException(500, warning)
 
 # Dismiss digest items
 class DismissItemRequest(BaseModel):
