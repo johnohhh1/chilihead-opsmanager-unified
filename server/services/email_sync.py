@@ -7,14 +7,14 @@ from sqlalchemy import desc
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import base64
-from models import EmailCache, EmailAnalysisCache, WatchConfig
+from models import EmailCache, EmailAnalysisCache, WatchConfig, EmailAttachment
 from services.model_quality import (
     get_model_tier,
     get_default_trust_score,
     should_auto_reanalyze,
     update_trust_score
 )
-from services.gmail import get_service, get_user_threads
+from services.gmail import get_service, get_user_threads, get_attachment
 
 
 class EmailSyncService:
@@ -368,6 +368,108 @@ class EmailSyncService:
         return body_text, body_html
 
     @staticmethod
+    def extract_and_store_attachments(
+        db: Session,
+        message: dict,
+        thread_id: str
+    ) -> List[Dict]:
+        """
+        Extract attachment metadata and store in database
+        Returns list of attachment info for caching
+        """
+        gmail_message_id = message.get('id')
+        payload = message.get('payload', {})
+        attachments = []
+
+        def extract_content_id(headers: list) -> Optional[str]:
+            """Extract Content-ID from part headers for inline images"""
+            for h in headers:
+                if h['name'].lower() == 'content-id':
+                    # Remove < > brackets if present and any @ domain suffix
+                    # Gmail stores like: <imageabc123@domain.com> but HTML refs like: cid:imageabc123@domain.com
+                    cid = h['value'].strip('<>').strip()
+                    return cid
+            return None
+
+        def process_part(part):
+            nonlocal attachments
+
+            mime_type = part.get('mimeType', '')
+            filename = part.get('filename', '')
+            body = part.get('body', {})
+            part_headers = part.get('headers', [])
+
+            # Check if this is an attachment or inline image
+            if filename or mime_type.startswith('image/'):
+                attachment_id = body.get('attachmentId')
+                inline_data = body.get('data')
+                size = body.get('size', 0)
+                content_id = extract_content_id(part_headers)
+
+                # Determine if inline or attachment
+                is_inline = content_id is not None or inline_data is not None
+
+                attachment_info = {
+                    'filename': filename or f'image_{len(attachments)}.jpg',
+                    'mime_type': mime_type,
+                    'size': size,
+                    'content_id': content_id,
+                    'is_inline': is_inline
+                }
+
+                # Store in database
+                existing = db.query(EmailAttachment).filter_by(
+                    thread_id=thread_id,
+                    gmail_message_id=gmail_message_id,
+                    content_id=content_id
+                ).first() if content_id else None
+
+                if not existing:
+                    # Fetch attachment data if needed
+                    if attachment_id and not inline_data:
+                        try:
+                            att_data = get_attachment(gmail_message_id, attachment_id)
+                            inline_data = att_data['data']
+                            size = att_data['size']
+                        except Exception as e:
+                            print(f"Failed to fetch attachment {attachment_id}: {e}")
+                            return
+
+                    if inline_data:
+                        attachment_record = EmailAttachment(
+                            thread_id=thread_id,
+                            gmail_message_id=gmail_message_id,
+                            gmail_attachment_id=attachment_id,
+                            filename=attachment_info['filename'],
+                            mime_type=mime_type,
+                            size_bytes=size,
+                            content_id=content_id,
+                            data=inline_data,
+                            is_inline=is_inline
+                        )
+                        db.add(attachment_record)
+                        attachment_info['stored'] = True
+                    else:
+                        attachment_info['stored'] = False
+
+                attachments.append(attachment_info)
+
+            # Recurse for multipart
+            if 'parts' in part:
+                for subpart in part['parts']:
+                    process_part(subpart)
+
+        # Process payload
+        if 'parts' in payload:
+            for part in payload['parts']:
+                process_part(part)
+        else:
+            process_part(payload)
+
+        db.commit()
+        return attachments
+
+    @staticmethod
     def extract_email_metadata(message: dict) -> dict:
         """Extract metadata from Gmail message"""
         headers = {h['name'].lower(): h['value']
@@ -471,11 +573,18 @@ class EmailSyncService:
                     first_msg.get('payload', {})
                 )
 
+                # Extract and store attachments
+                attachments = EmailSyncService.extract_and_store_attachments(
+                    db, first_msg, thread_id
+                )
+
                 if existing:
                     # Update existing cache entry
                     existing.gmail_synced_at = datetime.now()
                     existing.labels = metadata['labels']
                     existing.is_read = metadata['is_read']
+                    existing.attachments_json = attachments
+                    existing.has_images = metadata['has_images'] or len(attachments) > 0
                     updated_count += 1
                 else:
                     # Create new cache entry
@@ -487,11 +596,11 @@ class EmailSyncService:
                         recipients=metadata['recipients'],
                         body_text=body_text,
                         body_html=body_html,
-                        attachments_json=[],  # TODO: Extract attachments if needed
+                        attachments_json=attachments,
                         labels=metadata['labels'],
                         received_at=metadata['received_at'],
                         is_read=metadata['is_read'],
-                        has_images=metadata['has_images']
+                        has_images=metadata['has_images'] or len(attachments) > 0
                     )
                     db.add(email_cache)
                     synced_count += 1
@@ -575,6 +684,11 @@ class EmailSyncService:
             EmailAnalysisCache.thread_id == thread_id
         ).first()
 
+        # Process HTML to replace cid: references
+        processed_html = EmailSyncService.process_html_with_attachments(
+            db, thread_id, email.body_html
+        )
+
         return {
             "thread_id": email.thread_id,
             "gmail_message_id": email.gmail_message_id,
@@ -582,7 +696,7 @@ class EmailSyncService:
             "sender": email.sender,
             "recipients": email.recipients,
             "body_text": email.body_text,
-            "body_html": email.body_html,
+            "body_html": processed_html,
             "attachments": email.attachments_json,
             "received_at": email.received_at.isoformat(),
             "is_read": email.is_read,
@@ -652,6 +766,45 @@ class EmailSyncService:
             "success": True,
             "domains": config.priority_domains or []
         }
+
+    @staticmethod
+    def process_html_with_attachments(
+        db: Session,
+        thread_id: str,
+        body_html: str,
+        backend_url: str = "http://localhost:8002"
+    ) -> str:
+        """
+        Replace cid: references in HTML with URLs to backend attachment endpoints
+        Handles images both standalone and wrapped in <a> tags (like RAP Mobile)
+
+        Args:
+            db: Database session
+            thread_id: Gmail thread ID
+            body_html: Original HTML body with cid: references
+            backend_url: Base URL for backend API
+
+        Returns:
+            Modified HTML with cid: references replaced with /api/attachments/by-cid URLs
+        """
+        import re
+
+        if not body_html:
+            return body_html
+
+        # Pattern 1: src="cid:xxxxx" or src='cid:xxxxx' (standard inline images)
+        # Pattern 2: Also handles images inside <a> tags (RAP Mobile case)
+        cid_pattern = r'src=["\']cid:([^"\']+)["\']'
+
+        def replace_cid(match):
+            content_id = match.group(1)
+            # Replace with backend URL
+            return f'src="{backend_url}/api/attachments/by-cid/{thread_id}/{content_id}"'
+
+        # Replace all cid: references
+        processed_html = re.sub(cid_pattern, replace_cid, body_html)
+
+        return processed_html
 
     @staticmethod
     def remove_watched_domain(db: Session, domain: str) -> dict:
