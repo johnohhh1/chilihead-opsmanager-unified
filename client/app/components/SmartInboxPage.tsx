@@ -283,8 +283,9 @@ export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPa
     let match;
     while ((match = imgRegex.exec(html)) !== null) {
       const src = match[1];
-      // Only include http/https images (skip cid: and data: URLs)
-      if (src.startsWith('http://') || src.startsWith('https://')) {
+      // Include all images that are NOT cid: or data: URLs
+      // Backend already converts cid: to http://localhost:8002/api/attachments/...
+      if (!src.startsWith('cid:') && !src.startsWith('data:')) {
         images.push(src);
       }
     }
@@ -716,7 +717,7 @@ export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPa
                     className="prose prose-invert max-w-none text-gray-300"
                     dangerouslySetInnerHTML={{
                       __html: selectedEmail.body_html
-                        .replace(/<img[^>]+src="cid:[^"]*"[^>]*>/gi, '<div class="bg-gray-700 text-gray-400 text-xs p-2 rounded my-2">📷 [Image removed - check above for downloadable images]</div>')
+                        // Don't remove cid: images - backend already replaced them with proper URLs
                         .replace(/<img/gi, '<img style="max-width: 100%; height: auto;" onerror="this.style.display=\'none\'"')
                     }}
                   />

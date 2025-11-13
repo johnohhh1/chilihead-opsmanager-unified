@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, Request
-from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
+from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse, Response
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
@@ -43,6 +43,85 @@ app.include_router(calendar_router, prefix="")  # NEW: Google Calendar
 app.include_router(models_router, prefix="")  # NEW: Models listing
 app.include_router(sms_router, prefix="")  # NEW: SMS messaging
 app.include_router(inbox_router, prefix="")  # NEW: Inbox feature
+
+@app.get("/api/attachments/{attachment_id}")
+async def get_attachment(attachment_id: str, db: Session = Depends(get_db)):
+    """
+    Serve email attachment by ID
+    Used for inline images (replacing cid: references) and regular attachments
+    """
+    from models import EmailAttachment
+    import base64
+
+    attachment = db.query(EmailAttachment).filter(
+        EmailAttachment.id == attachment_id
+    ).first()
+
+    if not attachment:
+        raise HTTPException(404, "Attachment not found")
+
+    # Update last accessed timestamp
+    from datetime import datetime
+    attachment.last_accessed_at = datetime.now()
+    db.commit()
+
+    # Decode base64 data
+    try:
+        # Gmail API returns base64url, convert to bytes
+        data_bytes = base64.urlsafe_b64decode(
+            attachment.data.replace('-', '+').replace('_', '/')
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Failed to decode attachment: {str(e)}")
+
+    return Response(
+        content=data_bytes,
+        media_type=attachment.mime_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{attachment.filename}"'
+        }
+    )
+
+@app.get("/api/attachments/by-cid/{thread_id}/{content_id}")
+async def get_attachment_by_cid(
+    thread_id: str,
+    content_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Serve attachment by Content-ID (for cid: references in HTML emails)
+    """
+    from models import EmailAttachment
+    import base64
+
+    attachment = db.query(EmailAttachment).filter(
+        EmailAttachment.thread_id == thread_id,
+        EmailAttachment.content_id == content_id
+    ).first()
+
+    if not attachment:
+        raise HTTPException(404, f"Attachment with cid:{content_id} not found")
+
+    # Update last accessed timestamp
+    from datetime import datetime
+    attachment.last_accessed_at = datetime.now()
+    db.commit()
+
+    # Decode base64 data
+    try:
+        data_bytes = base64.urlsafe_b64decode(
+            attachment.data.replace('-', '+').replace('_', '/')
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Failed to decode attachment: {str(e)}")
+
+    return Response(
+        content=data_bytes,
+        media_type=attachment.mime_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{attachment.filename}"'
+        }
+    )
 
 class SummarizeIn(BaseModel):
     thread_id: str

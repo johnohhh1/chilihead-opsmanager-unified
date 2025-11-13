@@ -33,18 +33,28 @@ AUBS_PERSONA = """
 You are AUBS (Auburn Hills Assistant) - John's operations AI for Chili's #605.
 
 PERSONALITY:
-- Direct, no-nonsense, like a trusted GM who's seen it all
-- Midwest-friendly but gets straight to the point
-- Uses restaurant lingo naturally (86'd, in the weeds, BOH, FOH)
-- Calls out problems clearly but offers solutions
-- Has your back but won't sugarcoat issues
+- Supportive partner focused on making John's job easier
+- Clear and direct without being preachy or condescending
+- Helpful problem-solver, not a lecturer
+- Respects that John knows his team and business
+- Focuses on facts and solutions, not explanations of why things matter
 
-SPEECH PATTERNS:
-- "Here's the deal..." when getting to the point
-- "Heads up..." for warnings
-- "Real talk..." when being blunt
-- "You're in the weeds on..." when overwhelmed
-- "Let's knock out..." for action items
+COMMUNICATION STYLE:
+- State the facts clearly
+- Provide specific details (who, what, when, where)
+- Suggest solutions when helpful
+- Skip the lectures about why something is important
+- Trust John to prioritize and make decisions
+
+EXAMPLES:
+✓ "Hannah's pay card failed - she hasn't been paid in 48 hours. Payroll: 555-0123"
+✗ "Real talk, John. This is about recordkeeping and could lead to bigger headaches..."
+
+✓ "Blake called off for tonight 5-10pm. Sarah and Mike are available."
+✗ "Here's the deal, you're in the weeds on coverage..."
+
+✓ "P5 schedule due Friday 5pm. Takes about 30 minutes."
+✗ "Let's knock this out before it becomes a problem..."
 
 PRIORITIES:
 1. Guest safety & experience (health dept, quality issues)
@@ -52,16 +62,6 @@ PRIORITIES:
 3. Business continuity (coverage, equipment, supplies)
 4. Corporate compliance (reports, deadlines, audits)
 5. Everything else
-
-COMMUNICATION STYLE:
-✓ "Hannah's pay card is dead - she hasn't been paid in 48 hours. Call payroll NOW."
-✗ "Please follow up regarding employee compensation issue."
-
-✓ "Blake called off for tonight's dinner rush (5-10pm). Sarah and Mike are your best bets."
-✗ "Coverage is needed for the evening shift."
-
-✓ "P5 schedule is due Friday 5pm. You're gonna need 30 minutes. Don't leave it till last minute."
-✗ "Please submit the P5 manager schedule by the deadline."
 """
 
 # The ACTUAL prompt from your instructions with AUBS persona
@@ -222,35 +222,55 @@ def summarize_thread_advanced(thread_id: str, use_vision: bool = True, db: Optio
 
     # Get all messages in thread
     msgs = get_thread_messages(thread_id)
-    
+
     if not msgs:
         return {
             "summary": "No messages found in thread",
             "structured_data": None,
             "has_images": False
         }
-    
+
     # Extract full email content WITH images
     email_content = []
     all_images = []
-    
+
     for msg in msgs:
         headers = msg.get("payload", {}).get("headers", [])
         header_dict = {h["name"].lower(): h["value"] for h in headers}
-        
-        # Extract body and images
-        body, images = extract_attachments_with_images(msg.get("payload", {}))
-        
+
+        # Extract body and inline images from payload
+        body, inline_images = extract_attachments_with_images(msg.get("payload", {}))
+
         email_content.append({
             "from": header_dict.get("from", ""),
             "to": header_dict.get("to", ""),
             "date": header_dict.get("date", ""),
             "subject": header_dict.get("subject", ""),
             "body": body,
-            "image_count": len(images)
+            "image_count": len(inline_images)
         })
-        
-        all_images.extend(images)
+
+        all_images.extend(inline_images)
+
+    # Fetch stored attachments from database if available
+    if db:
+        from models import EmailAttachment
+        stored_attachments = db.query(EmailAttachment).filter(
+            EmailAttachment.thread_id == thread_id,
+            EmailAttachment.mime_type.like('image/%')
+        ).all()
+
+        # Add stored attachments that aren't already in all_images
+        for att in stored_attachments:
+            # Check if already included (by checking if data matches)
+            if not any(img.get('data') == att.data for img in all_images):
+                all_images.append({
+                    'mime_type': att.mime_type,
+                    'data': att.data,
+                    'filename': att.filename,
+                    'size': att.size_bytes,
+                    'from_db': True
+                })
     
     # Check if this is a RAP Mobile or dashboard email
     is_dashboard_email = any(
@@ -375,12 +395,27 @@ Provide both:
                 # Get subject from email content
                 subject = email_content[0].get('subject', 'Unknown') if email_content else 'Unknown'
 
+                # Extract key entities/names from the analysis for better searchability
+                import re
+                entities = []
+                # Look for proper names (capitalized words) in the AI's analysis
+                names = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b', content)
+                # Common names to include
+                common_names = {'Pedro', 'Hannah', 'Blake', 'Sarah', 'Mike', 'Zimmerman'}
+                entities = [n for n in names if n in common_names][:3]  # Top 3
+
+                # Build searchable summary
+                entity_str = f" (re: {', '.join(entities)})" if entities else ""
+                priority_str = ""
+                if structured_data and structured_data.get('priority') == 'urgent':
+                    priority_str = "[URGENT] "
+
                 # Record the analysis
                 AgentMemoryService.record_event(
                     db=db,
                     agent_type='triage',
                     event_type='email_analyzed',
-                    summary=f"Analyzed email: {subject[:100]}",
+                    summary=f"{priority_str}{subject[:60]}{entity_str}",
                     context_data={
                         'email_subject': subject,
                         'sender': email_content[0].get('from', '') if email_content else '',

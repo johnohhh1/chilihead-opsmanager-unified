@@ -87,6 +87,10 @@ class AgentMemoryService:
         Returns:
             List of recent AgentMemory records
         """
+        # FIX: Force fresh read from database, don't use cached objects
+        # This ensures we see recent updates from other sessions (like chat marking items resolved)
+        db.expire_all()
+
         cutoff = datetime.now() - timedelta(hours=hours)
 
         query = db.query(AgentMemory).filter(
@@ -136,7 +140,8 @@ class AgentMemoryService:
     def get_coordination_context(
         db: Session,
         hours: int = 24,
-        format: str = "text"
+        format: str = "text",
+        include_resolved: bool = False
     ) -> str:
         """
         Build coordination context for agents showing what others have done
@@ -144,11 +149,16 @@ class AgentMemoryService:
         Args:
             hours: How far back to look
             format: "text" or "json"
+            include_resolved: Include items marked as resolved (default False)
 
         Returns:
             Formatted context string showing recent agent activity
         """
         memories = AgentMemoryService.get_recent_context(db, hours=hours, limit=100)
+
+        # Filter out resolved items unless requested
+        if not include_resolved:
+            memories = [m for m in memories if "[RESOLVED]" not in m.summary]
 
         if format == "json":
             return json.dumps([{
@@ -156,11 +166,12 @@ class AgentMemoryService:
                 "event": m.event_type,
                 "summary": m.summary,
                 "time": m.created_at.isoformat(),
-                "findings": m.key_findings
+                "findings": m.key_findings,
+                "resolved": "[RESOLVED]" in m.summary
             } for m in memories], indent=2)
 
         # Text format for LLM system prompts
-        context_lines = [f"AGENT MEMORY (Last {hours}h):\n"]
+        context_lines = [f"AGENT MEMORY (Last {hours}h - Active items only):\n"]
 
         # Group by agent
         by_agent = {}
@@ -173,7 +184,14 @@ class AgentMemoryService:
             context_lines.append(f"\n{agent_type.upper()} Agent:")
             for mem in agent_memories[:10]:  # Top 10 per agent
                 time_str = mem.created_at.strftime('%b %d, %I:%M %p')
-                context_lines.append(f"  - [{time_str}] {mem.summary}")
+
+                # Check for user annotations
+                annotation_note = ""
+                if mem.context_data and 'annotations' in mem.context_data:
+                    latest = mem.context_data['annotations'][-1]
+                    annotation_note = f" (User note: {latest['note']})"
+
+                context_lines.append(f"  - [{time_str}] {mem.summary}{annotation_note}")
 
                 # Add key findings if present
                 if mem.key_findings:
@@ -265,6 +283,152 @@ class AgentMemoryService:
         db.refresh(session)
 
         return session
+
+    @staticmethod
+    def update_memory(
+        db: Session,
+        memory_id: str,
+        updates: Dict[str, Any]
+    ) -> Optional[AgentMemory]:
+        """
+        Update an existing memory record
+
+        Args:
+            memory_id: UUID of the memory to update
+            updates: Dict of fields to update (summary, key_findings, context_data, etc.)
+
+        Returns:
+            Updated AgentMemory or None if not found
+        """
+        memory = db.query(AgentMemory).filter(AgentMemory.id == memory_id).first()
+
+        if not memory:
+            return None
+
+        # Update allowed fields
+        for field, value in updates.items():
+            if hasattr(memory, field):
+                setattr(memory, field, value)
+
+        db.commit()
+        db.refresh(memory)
+
+        return memory
+
+    @staticmethod
+    def annotate_memory(
+        db: Session,
+        email_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        annotation: str = None,
+        status: str = "resolved"
+    ) -> List[AgentMemory]:
+        """
+        Annotate all memories related to an entity (e.g., "Pedro issue resolved")
+
+        Args:
+            email_id: Email thread ID
+            task_id: Task ID
+            annotation: User's correction/note
+            status: Status to mark (resolved, incorrect, outdated)
+
+        Returns:
+            List of updated AgentMemory records
+        """
+        # Find all related memories
+        related = AgentMemoryService.get_related_memory(db, email_id, task_id)
+
+        updated = []
+        for mem in related:
+            # Add annotation to context_data
+            if not mem.context_data:
+                mem.context_data = {}
+
+            if 'annotations' not in mem.context_data:
+                mem.context_data['annotations'] = []
+
+            mem.context_data['annotations'].append({
+                'timestamp': datetime.now().isoformat(),
+                'note': annotation,
+                'status': status
+            })
+
+            # Update summary to reflect resolution
+            if status == "resolved" and "RESOLVED" not in mem.summary:
+                mem.summary = f"[RESOLVED] {mem.summary}"
+
+            updated.append(mem)
+
+        db.commit()
+        return updated
+
+    @staticmethod
+    def mark_resolved(
+        db: Session,
+        email_id: Optional[str] = None,
+        summary_text: Optional[str] = None,
+        annotation: str = "Resolved by user"
+    ) -> int:
+        """
+        Mark memories as resolved based on email ID or summary text match
+
+        Args:
+            email_id: Specific email thread ID
+            summary_text: Text to search in summary (e.g., "Pedro", "payroll")
+            annotation: Note about resolution
+
+        Returns:
+            Number of memories marked as resolved
+        """
+        query = db.query(AgentMemory)
+
+        if email_id:
+            query = query.filter(AgentMemory.email_id == email_id)
+        elif summary_text:
+            query = query.filter(AgentMemory.summary.ilike(f"%{summary_text}%"))
+        else:
+            return 0
+
+        # Only update recent memories (last 7 days)
+        cutoff = datetime.now() - timedelta(days=7)
+        query = query.filter(AgentMemory.created_at >= cutoff)
+
+        memories = query.all()
+
+        updated_count = 0
+        for mem in memories:
+            # Skip if already marked resolved
+            if "[RESOLVED]" in mem.summary:
+                continue
+
+            # Add annotation
+            if not mem.context_data:
+                mem.context_data = {}
+
+            if 'annotations' not in mem.context_data:
+                mem.context_data['annotations'] = []
+
+            mem.context_data['annotations'].append({
+                'timestamp': datetime.now().isoformat(),
+                'note': annotation,
+                'status': 'resolved'
+            })
+
+            # Update summary
+            mem.summary = f"[RESOLVED] {mem.summary}"
+
+            # FIX 1: Force SQLAlchemy to track this update
+            db.add(mem)
+            updated_count += 1
+
+        # FIX 2: Commit changes to database
+        db.commit()
+
+        # FIX 3: CRITICAL - Expire all cached objects so other sessions see changes
+        db.expire_all()
+
+        print(f"[Memory System] Marked {updated_count} memories as resolved for '{summary_text or email_id}'")
+        return updated_count
 
     @staticmethod
     def get_digest_context(db: Session, hours: int = 24) -> str:

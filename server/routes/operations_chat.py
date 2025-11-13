@@ -39,23 +39,22 @@ def get_openai_config():
         "org_id": os.getenv("OPENAI_ORG_ID")
     }
 
-# AUBS PERSONA for chatbot
+# AUBS PERSONA for chatbot - SIMPLE AND DIRECT
 AUBS_PERSONA = """
 You are AUBS (Auburn Hills Assistant) - John's operations AI for Chili's #605.
 
-PERSONALITY:
-- Direct, no-nonsense, like a trusted GM who's seen it all
-- Midwest-friendly but gets straight to the point
-- Uses restaurant lingo naturally (86'd, in the weeds, BOH, FOH)
-- Calls out problems clearly but offers solutions
-- Has your back but won't sugarcoat issues
+CORE RULES:
+- Answer questions directly with facts
+- Don't lecture or explain why things matter (John already knows)
+- Don't tell John what he "needs to do" unless he asks for advice
+- Don't make up procedures or requirements that don't exist
+- If John says something is resolved, it's resolved - don't argue
 
-SPEECH PATTERNS:
-- "Here's the deal..." when getting to the point
-- "Heads up..." for warnings
-- "Real talk..." when being blunt
-- "You're in the weeds on..." when overwhelmed
-- "Let's knock out..." for action items
+COMMUNICATION:
+- State facts clearly
+- Provide specific details when asked
+- Skip the preamble and get to the point
+- Trust John to make his own decisions
 """
 
 SYSTEM_PROMPT_TEMPLATE = """
@@ -279,15 +278,74 @@ async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
         try:
             from services.agent_memory import AgentMemoryService
 
+            # Check if user is correcting/updating memory
+            correction_keywords = [
+                'was handled', 'already done', 'not urgent', 'resolved', 'completed',
+                'fixed', 'update the memory', 'mark as done', 'taken care of',
+                'all set', 'no longer needed', 'false alarm', 'ignore that',
+                'scratch that', 'never mind', 'cancel', 'disregard'
+            ]
+            user_msg_lower = request.message.lower()
+
+            is_correction = any(keyword in user_msg_lower for keyword in correction_keywords)
+
+            total_resolved = 0
+            resolved_topics = []
+
+            if is_correction:
+                # Try to extract what they're referring to
+                # Common patterns: "the pedro issue", "payroll problem", etc.
+                import re
+
+                # Look for key nouns/topics
+                topics = []
+                if 'pedro' in user_msg_lower:
+                    topics.append('Pedro')
+                if 'payroll' in user_msg_lower or 'pay' in user_msg_lower:
+                    topics.append('payroll')
+                if 'schedule' in user_msg_lower:
+                    topics.append('schedule')
+                if 'invoice' in user_msg_lower:
+                    topics.append('invoice')
+                if 'hannah' in user_msg_lower or 'zimmerman' in user_msg_lower:
+                    topics.append('Hannah')
+                if 'coverage' in user_msg_lower or 'call' in user_msg_lower:
+                    topics.append('coverage')
+
+                # Mark related memories as resolved
+                for topic in topics:
+                    resolved_count = AgentMemoryService.mark_resolved(
+                        db=db,
+                        summary_text=topic,
+                        annotation=f"User update: {request.message}"
+                    )
+                    if resolved_count > 0:
+                        total_resolved += resolved_count
+                        resolved_topics.append(f"{topic} ({resolved_count})")
+                        print(f"[Memory Update] Marked {resolved_count} '{topic}' memories as resolved")
+
+                # FIX: Force immediate database flush and commit
+                if total_resolved > 0:
+                    db.flush()
+                    db.commit()
+                    db.expire_all()
+                    print(f"[Memory System] ✓ Committed {total_resolved} memory updates to database")
+
+            # Add memory update info to chat record
             AgentMemoryService.record_event(
                 db=db,
                 agent_type='operations_chat',
                 event_type='question_answered',
-                summary=f"Answered: {request.message[:80]}...",
+                summary=f"Answered: {request.message[:80]}..." + (f" [Updated {total_resolved} memories]" if total_resolved > 0 else ""),
                 context_data={
                     'user_question': request.message,
                     'assistant_response': assistant_response[:500],
-                    'model_used': request.model
+                    'model_used': request.model,
+                    'was_correction': is_correction,
+                    'memory_updates': {
+                        'total_resolved': total_resolved,
+                        'topics': resolved_topics
+                    } if is_correction else {}
                 },
                 key_findings={},
                 model_used=request.model,
@@ -298,10 +356,16 @@ async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
 
         db.commit()
 
+        # Add memory update confirmation to response
+        memory_update_note = ""
+        if total_resolved > 0:
+            memory_update_note = f"\n\n✅ **Memory Updated**: Marked {total_resolved} item{'s' if total_resolved != 1 else ''} as resolved ({', '.join(resolved_topics)}). This will be reflected in your next daily digest."
+
         return {
-            "response": assistant_response,
+            "response": assistant_response + memory_update_note,
             "session_id": session.id,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "memory_updates": total_resolved if is_correction else 0
         }
 
     except httpx.HTTPError as e:
@@ -378,5 +442,125 @@ async def get_chat_suggestions():
             "What's the priority on the payroll issue?",
             "When is the manager schedule due?",
             "Help me plan my next 2 hours"
+        ]
+    }
+
+
+@router.post("/api/operations-chat/mark-resolved")
+async def mark_resolved(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Manually mark items as resolved in agent memory
+
+    Body:
+        {
+            "topic": "Pedro" | "payroll" | etc.,
+            "annotation": "User note about resolution"
+        }
+    """
+    from services.agent_memory import AgentMemoryService
+
+    topic = request.get('topic')
+    annotation = request.get('annotation', 'Marked as resolved by user')
+
+    if not topic:
+        raise HTTPException(400, "Topic is required")
+
+    resolved_count = AgentMemoryService.mark_resolved(
+        db=db,
+        summary_text=topic,
+        annotation=annotation
+    )
+
+    return {
+        "success": True,
+        "resolved_count": resolved_count,
+        "topic": topic,
+        "message": f"Marked {resolved_count} memories related to '{topic}' as resolved"
+    }
+
+
+@router.get("/api/operations-chat/debug-memory/{topic}")
+async def debug_memory_state(topic: str, db: Session = Depends(get_db)):
+    """
+    Debug endpoint to see current memory state for a specific topic
+    Helps troubleshoot why items aren't being marked as resolved
+    """
+    from services.agent_memory import AgentMemoryService
+
+    # Force fresh read from database
+    db.expire_all()
+
+    # Search for topic (case-insensitive)
+    memories = AgentMemoryService.search_memory(db, topic, limit=50)
+
+    return {
+        "topic": topic,
+        "total_found": len(memories),
+        "resolved_count": len([m for m in memories if "[RESOLVED]" in m.summary]),
+        "active_count": len([m for m in memories if "[RESOLVED]" not in m.summary]),
+        "memories": [
+            {
+                "id": m.id,
+                "summary": m.summary,
+                "is_resolved": "[RESOLVED]" in m.summary,
+                "created_at": m.created_at.isoformat(),
+                "agent_type": m.agent_type,
+                "event_type": m.event_type,
+                "annotations": m.context_data.get('annotations', []) if m.context_data else [],
+                "email_id": m.email_id,
+                "task_id": m.task_id
+            }
+            for m in memories
+        ]
+    }
+
+
+@router.get("/api/operations-chat/memory-status")
+async def get_memory_status(db: Session = Depends(get_db)):
+    """
+    Get current status of agent memory (active vs resolved items)
+    """
+    from services.agent_memory import AgentMemoryService
+    from models import AgentMemory
+    from datetime import datetime, timedelta
+
+    # Force fresh read
+    db.expire_all()
+
+    cutoff = datetime.now() - timedelta(hours=48)
+
+    # Count active and resolved
+    all_recent = db.query(AgentMemory).filter(
+        AgentMemory.created_at >= cutoff
+    ).all()
+
+    resolved = [m for m in all_recent if "[RESOLVED]" in m.summary]
+    active = [m for m in all_recent if "[RESOLVED]" not in m.summary]
+
+    # Group active by agent type
+    by_agent = {}
+    for mem in active:
+        if mem.agent_type not in by_agent:
+            by_agent[mem.agent_type] = []
+        by_agent[mem.agent_type].append({
+            'id': mem.id,
+            'summary': mem.summary,
+            'created_at': mem.created_at.isoformat(),
+            'event_type': mem.event_type
+        })
+
+    return {
+        "total_active": len(active),
+        "total_resolved": len(resolved),
+        "by_agent": by_agent,
+        "resolved_items": [
+            {
+                'summary': m.summary,
+                'resolved_at': m.context_data.get('annotations', [{}])[-1].get('timestamp') if m.context_data else None
+            }
+            for m in resolved[:10]  # Last 10 resolved
         ]
     }

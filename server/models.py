@@ -291,3 +291,27 @@ class PortalMetrics(Base):
     email_subject = Column(String(500))
     parsed_at = Column(DateTime, default=func.now())
     created_at = Column(DateTime, default=func.now())
+
+
+class EmailAttachment(Base):
+    """Store email attachments locally (images, PDFs, etc.)"""
+    __tablename__ = 'email_attachments'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    thread_id = Column(String(255), nullable=False, index=True)  # Gmail thread ID
+    gmail_message_id = Column(String(255), nullable=False, index=True)  # Gmail message ID
+    gmail_attachment_id = Column(Text, unique=True)  # Gmail's attachmentId for fetching (can be >255 chars)
+
+    # File info
+    filename = Column(String(500))
+    mime_type = Column(String(100), index=True)
+    size_bytes = Column(Integer)
+    content_id = Column(String(255), index=True)  # For cid: references in HTML emails
+
+    # Storage
+    data = Column(Text)  # Base64-encoded file data
+    is_inline = Column(Boolean, default=False)  # Inline image vs attachment
+
+    # Metadata
+    created_at = Column(DateTime, default=func.now())
+    last_accessed_at = Column(DateTime)
