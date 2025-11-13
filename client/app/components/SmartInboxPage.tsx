@@ -218,10 +218,10 @@ export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPa
     }
   };
 
-  const analyzeEmail = async (threadId: string) => {
+  const analyzeEmail = async (threadId: string, forceRefresh: boolean = false) => {
     try {
       setAnalyzing(true);
-      const response = await fetch('/api/backend/smart-triage', {
+      const response = await fetch(`/api/backend/smart-triage?force_refresh=${forceRefresh}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ thread_id: threadId, model: selectedModel })
@@ -241,7 +241,10 @@ export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPa
         email.thread_id === threadId ? { ...email, analysis: data, state: { ...email.state, analyzed: true } } : email
       ));
 
-      showToast(data.cached ? 'Analysis loaded from cache' : 'Analysis complete', 'success');
+      showToast(
+        forceRefresh ? 'Fresh analysis complete' : (data.cached ? 'Analysis loaded from cache' : 'Analysis complete'),
+        'success'
+      );
     } catch (error) {
       console.error('Failed to analyze email:', error);
       showToast('Analysis failed', 'error');
@@ -753,9 +756,10 @@ export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPa
                 </button>
 
                 <button
-                  onClick={() => analyzeEmail(selectedEmail.thread_id)}
+                  onClick={() => analyzeEmail(selectedEmail.thread_id, selectedEmail.analysis ? true : false)}
                   disabled={analyzing}
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm flex items-center space-x-2 disabled:opacity-50"
+                  title={selectedEmail.analysis ? 'Force fresh AI analysis with current model' : 'Analyze email with AI'}
                 >
                   <Brain className="h-4 w-4" />
                   <span>
