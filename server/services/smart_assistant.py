@@ -132,56 +132,103 @@ def extract_message_body(payload: dict) -> str:
 def smart_triage(thread_id: str, model: str = "gpt-4o", db = None) -> dict:
     """
     Actually understand the email and provide intelligent analysis
-    Not just reformatting - real comprehension
+    Includes vision support for RAP Mobile dashboards and other images
     """
     from .model_provider import ModelProvider
-
-    msgs = get_thread_messages(thread_id)
-    if not msgs:
-        return {"analysis": "No messages found", "tasks": []}
-
-    # Get full thread content
-    thread_data = []
-    for msg in msgs[-3:]:  # Last 3 messages for context
-        headers = msg.get("payload", {}).get("headers", [])
-        header_dict = {h["name"].lower(): h["value"] for h in headers}
-        body = extract_message_body(msg.get("payload", {}))
-
-        thread_data.append({
-            "from": header_dict.get("from", ""),
-            "to": header_dict.get("to", ""),
-            "subject": header_dict.get("subject", ""),
-            "date": header_dict.get("date", ""),
-            "body": body[:2000]  # Limit body length
-        })
-
-    current_time = datetime.now().strftime('%A, %B %d, %Y at %I:%M %p ET')
-
-    prompt = SMART_ASSISTANT_PROMPT_TEMPLATE.format(
-        aubs_persona=AUBS_PERSONA,
-        current_time=current_time
-    )
-    prompt += "\n\nEMAIL THREAD TO ANALYZE:\n"
-    prompt += json.dumps(thread_data, indent=2)
-    prompt += "\n\nProvide your analysis and extracted action items in a conversational but structured way."
-
-    messages = [
-        {
-            "role": "system",
-            "content": "You are an intelligent executive assistant. Be practical, specific, and understand context. Don't just reformat - actually comprehend what needs to be done."
-        },
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ]
+    from .ai_triage import extract_attachments_with_images
+    from .gmail import get_service
 
     try:
+        msgs = get_thread_messages(thread_id)
+        if not msgs:
+            return {"analysis": "No messages found", "tasks": [], "thread_id": thread_id}
+
+        # Get full thread content with image support
+        thread_data = []
+        all_images = []
+
+        for msg in msgs[-3:]:  # Last 3 messages for context
+            headers = msg.get("payload", {}).get("headers", [])
+            header_dict = {h["name"].lower(): h["value"] for h in headers}
+
+            # Extract both text and images
+            body, images = extract_attachments_with_images(msg.get("payload", {}))
+
+            # Download any attachment images
+            for img in images:
+                if img.get('attachment_id') and not img.get('data'):
+                    try:
+                        service = get_service()
+                        attachment = service.users().messages().attachments().get(
+                            userId='me',
+                            messageId=msg.get('id'),
+                            id=img['attachment_id']
+                        ).execute()
+                        img['data'] = attachment.get('data')
+                    except Exception as img_error:
+                        print(f"Warning: Failed to download attachment: {img_error}")
+
+            all_images.extend(images)
+
+            thread_data.append({
+                "from": header_dict.get("from", ""),
+                "to": header_dict.get("to", ""),
+                "subject": header_dict.get("subject", ""),
+                "date": header_dict.get("date", ""),
+                "body": body[:2000],  # Limit body length
+                "has_images": len(images) > 0
+            })
+
+        current_time = datetime.now().strftime('%A, %B %d, %Y at %I:%M %p ET')
+
+        prompt = SMART_ASSISTANT_PROMPT_TEMPLATE.format(
+            aubs_persona=AUBS_PERSONA,
+            current_time=current_time
+        )
+        prompt += "\n\nEMAIL THREAD TO ANALYZE:\n"
+        prompt += json.dumps(thread_data, indent=2)
+
+        if all_images:
+            prompt += f"\n\n📸 This email contains {len(all_images)} image(s). Analyze any dashboards or screenshots for key metrics."
+
+        prompt += "\n\nProvide your analysis and extracted action items in a conversational but structured way."
+
+        # Build message content - add images if available and model supports vision
+        messages = [
+            {
+                "role": "system",
+                "content": "You are an intelligent executive assistant with vision capabilities. Analyze text AND images to provide comprehensive analysis."
+            }
+        ]
+
+        # Add user message with images if using vision model
+        user_content = []
+        user_content.append({"type": "text", "text": prompt})
+
+        # Add images for vision models (gpt-4o, claude-3-opus, etc.)
+        if all_images and model in ['gpt-4o', 'gpt-4-vision-preview', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229']:
+            for img in all_images[:3]:  # Limit to 3 images to avoid token limits
+                if img.get('data'):
+                    # Gmail uses URL-safe base64
+                    image_data = img['data'].replace('-', '+').replace('_', '/')
+                    user_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{img.get('mime_type', 'image/png')};base64,{image_data}",
+                            "detail": "high"  # High detail for dashboards
+                        }
+                    })
+
+        messages.append({
+            "role": "user",
+            "content": user_content if len(user_content) > 1 else prompt
+        })
+
         analysis = ModelProvider.chat_completion_sync(
             messages=messages,
             model=model,
             temperature=0.3,
-            max_tokens=1500
+            max_tokens=2000  # Increased for vision analysis
         )
 
         # Extract specific tasks if mentioned
@@ -190,7 +237,9 @@ def smart_triage(thread_id: str, model: str = "gpt-4o", db = None) -> dict:
         result = {
             "analysis": analysis,
             "tasks": tasks,
-            "thread_id": thread_id
+            "thread_id": thread_id,
+            "has_images": len(all_images) > 0,
+            "image_count": len(all_images)
         }
 
         # Cache email and analysis if database provided
@@ -211,10 +260,10 @@ def smart_triage(thread_id: str, model: str = "gpt-4o", db = None) -> dict:
                     recipients={'to': [thread_data[0].get('to', '')]},
                     body_text=thread_data[0].get('body', ''),
                     body_html='',
-                    attachments=[],
+                    attachments=all_images,
                     labels=gmail_message.get('labelIds', []),
                     received_at=datetime.now(),
-                    has_images=False
+                    has_images=len(all_images) > 0
                 )
 
                 # Determine priority and category
@@ -238,18 +287,25 @@ def smart_triage(thread_id: str, model: str = "gpt-4o", db = None) -> dict:
                     key_entities={'tasks': [t['action'] for t in tasks]},
                     suggested_tasks=tasks,
                     sentiment='neutral',
-                    tokens_used=1500  # Estimate
+                    tokens_used=2000  # Estimate
                 )
             except Exception as cache_error:
                 print(f"Warning: Failed to cache analysis: {cache_error}")
+                # Don't fail the whole request if caching fails
+                import traceback
+                traceback.print_exc()
 
         return result
 
     except Exception as e:
+        print(f"Error in smart_triage: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {
-            "analysis": f"Error: {str(e)}",
+            "analysis": f"Error analyzing email: {str(e)}",
             "tasks": [],
-            "thread_id": thread_id
+            "thread_id": thread_id,
+            "error": True
         }
 
 def extract_smart_tasks(analysis: str, thread_data: list) -> list:
