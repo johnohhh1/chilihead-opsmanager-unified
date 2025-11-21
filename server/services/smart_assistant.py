@@ -250,6 +250,16 @@ def smart_triage(thread_id: str, model: str = "gpt-4o", db = None) -> dict:
                 # Get the latest message for caching
                 gmail_message = msgs[-1] if msgs else {}
 
+                # Extract body_html from the Gmail message
+                body_text, body_html = EmailSyncService.parse_email_body(gmail_message.get('payload', {}))
+
+                # Store attachments in database for serving
+                attachment_metadata = EmailSyncService.extract_and_store_attachments(
+                    db=db,
+                    message=gmail_message,
+                    thread_id=thread_id
+                )
+
                 # Cache the raw email
                 EmailSyncService.cache_email(
                     db=db,
@@ -258,9 +268,9 @@ def smart_triage(thread_id: str, model: str = "gpt-4o", db = None) -> dict:
                     subject=thread_data[0].get('subject', ''),
                     sender=thread_data[0].get('from', ''),
                     recipients={'to': [thread_data[0].get('to', '')]},
-                    body_text=thread_data[0].get('body', ''),
-                    body_html='',
-                    attachments=all_images,
+                    body_text=body_text or thread_data[0].get('body', ''),
+                    body_html=body_html or '',
+                    attachments=attachment_metadata,
                     labels=gmail_message.get('labelIds', []),
                     received_at=datetime.now(),
                     has_images=len(all_images) > 0
