@@ -18,6 +18,7 @@ interface ModelOption {
   name: string;
   provider: string;
   default?: boolean;
+  supports_vision?: boolean;
 }
 
 export default function OperationsChat({ dailyDigest, operations }: OperationsChatProps) {
@@ -62,13 +63,21 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
       });
       if (response.ok) {
         const data = await response.json();
+        console.log('Models API response:', data);
+        console.log('Total models:', data.total);
+        console.log('Claude models:', data.models?.filter((m: any) => m.provider === 'anthropic').length || 0);
+        console.log('Vision models:', data.models?.filter((m: any) => m.supports_vision).length || 0);
+
         setAvailableModels(data.models || []);
-        setOllamaStatus(data.ollama_status || "unknown");
+        setOllamaStatus(data.providers?.ollama?.status || "unknown");
 
         // Load saved model preference from localStorage
         const savedModel = localStorage.getItem('preferred-ai-model');
-        if (savedModel) {
+        if (savedModel && data.models?.some((m: any) => m.id === savedModel)) {
           setSelectedModel(savedModel);
+        } else if (data.models?.length > 0) {
+          // If saved model not found or no saved preference, use first available model
+          setSelectedModel(data.models[0].id);
         }
       }
     } catch (error) {
@@ -246,11 +255,18 @@ export default function OperationsChat({ dailyDigest, operations }: OperationsCh
           className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
           disabled={modelsLoading}
         >
-          {availableModels.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.name}
-            </option>
-          ))}
+          {availableModels.length === 0 ? (
+            <option value="">No models loaded - click refresh</option>
+          ) : (
+            availableModels.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name}
+                {model.supports_vision ? ' 👁️' : ''}
+                {model.provider === 'anthropic' ? ' (Claude)' : ''}
+                {model.provider === 'ollama' ? ' (Local)' : ''}
+              </option>
+            ))
+          )}
         </select>
         {ollamaStatus === "disconnected" && (
           <p className="text-xs text-yellow-400 mt-1">⚠ Ollama offline - run: ollama serve</p>

@@ -53,9 +53,11 @@ interface Email {
   };
 }
 
+type PageType = 'inbox' | 'triage' | 'todo' | 'delegations' | 'calendar' | 'team-board' | 'sms' | 'portal';
+
 interface SmartInboxPageProps {
   onAddToTodo: (items: any[], threadId?: string) => Promise<void>;
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: PageType) => void;
 }
 
 export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPageProps) {
@@ -281,17 +283,42 @@ export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPa
 
   const extractImages = (html: string): string[] => {
     if (!html) return [];
-    const imgRegex = /<img[^>]+src="([^"]+)"/gi;
+
+    // Look for ALL img tags, including those wrapped in anchor tags
+    // This regex will find img tags anywhere in the HTML
+    const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/gi;
     const images: string[] = [];
+    const seenImages = new Set<string>(); // Avoid duplicates
+
     let match;
     while ((match = imgRegex.exec(html)) !== null) {
       const src = match[1];
-      // Include all images that are NOT cid: or data: URLs
-      // Backend already converts cid: to http://localhost:8002/api/attachments/...
-      if (!src.startsWith('cid:') && !src.startsWith('data:')) {
-        images.push(src);
+
+      // Include all images except data: URLs (inline base64)
+      // Backend converts cid: to http://localhost:8002/api/attachments/...
+      // So we want to include those backend attachment URLs
+      if (!src.startsWith('data:') && !seenImages.has(src)) {
+        // Check if it's still a raw cid: (shouldn't happen if backend processed it)
+        if (src.startsWith('cid:')) {
+          console.warn('Found unprocessed cid: reference:', src);
+        } else {
+          images.push(src);
+          seenImages.add(src);
+
+          // For RAP Mobile emails, log that we found a dashboard image
+          if (src.includes('/api/attachments/') && src.includes('tableau')) {
+            console.log('Found RAP Mobile dashboard image:', src);
+          }
+        }
       }
     }
+
+    // Also check for images that might be in weird formats or wrapped differently
+    // Look specifically for tableau dashboard images that might be referenced differently
+    if (html.includes('tableauImage') || html.includes('RAP Mobile')) {
+      console.log(`Found ${images.length} images in RAP Mobile email`);
+    }
+
     return images;
   };
 
@@ -677,10 +704,30 @@ export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPa
 
               {/* Email Body */}
               <div className="flex-1 overflow-y-auto p-4">
-                {/* Images Section */}
-                {selectedEmail.has_images && selectedEmail.body_html && (
+                {/* Images Section - Show from HTML or Attachments */}
+                {selectedEmail.has_images && (
                   (() => {
-                    const images = extractImages(selectedEmail.body_html);
+                    // Try to extract images from HTML first
+                    let images: string[] = [];
+                    if (selectedEmail.body_html) {
+                      images = extractImages(selectedEmail.body_html);
+                    }
+
+                    // If no images in HTML but we have attachments, use those instead
+                    if (images.length === 0 && selectedEmail.attachments) {
+                      const attachments = typeof selectedEmail.attachments === 'string'
+                        ? JSON.parse(selectedEmail.attachments)
+                        : selectedEmail.attachments;
+
+                      // Create image URLs from inline attachments
+                      attachments.forEach((att: any) => {
+                        if (att.is_inline && att.content_id && att.mime_type?.startsWith('image/')) {
+                          const imgUrl = `/api/backend/api/attachments/by-cid/${selectedEmail.thread_id}/${att.content_id}`;
+                          images.push(imgUrl);
+                        }
+                      });
+                    }
+
                     if (images.length > 0) {
                       return (
                         <div className="mb-4 p-3 bg-gray-700 rounded-lg border border-gray-600">
@@ -690,21 +737,34 @@ export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPa
                               {images.length} Image{images.length > 1 ? 's' : ''} Found
                             </h4>
                           </div>
-                          <div className="space-y-2">
+                          <div className="space-y-3">
                             {images.map((imgUrl, idx) => (
-                              <div key={idx} className="flex items-center justify-between text-xs bg-gray-800 p-2 rounded">
-                                <span className="text-gray-400 truncate flex-1 mr-2">
-                                  {imgUrl.length > 60 ? imgUrl.substring(0, 60) + '...' : imgUrl}
-                                </span>
-                                <a
-                                  href={imgUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center space-x-1 px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
-                                >
-                                  <Download className="h-3 w-3" />
-                                  <span>Open</span>
-                                </a>
+                              <div key={idx} className="space-y-2">
+                                <div className="flex items-center justify-between text-xs bg-gray-800 p-2 rounded">
+                                  <span className="text-gray-400 truncate flex-1 mr-2">
+                                    Dashboard Image {idx + 1}
+                                  </span>
+                                  <a
+                                    href={imgUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center space-x-1 px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                    <span>Open Full Size</span>
+                                  </a>
+                                </div>
+                                {/* Display the image inline */}
+                                <img
+                                  src={imgUrl}
+                                  alt={`Dashboard ${idx + 1}`}
+                                  className="w-full rounded border border-gray-600"
+                                  style={{ maxHeight: '400px', objectFit: 'contain' }}
+                                  onError={(e) => {
+                                    console.error('Failed to load image:', imgUrl);
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
                               </div>
                             ))}
                           </div>
@@ -738,7 +798,22 @@ export default function SmartInboxPage({ onAddToTodo, onNavigate }: SmartInboxPa
                       AI Analysis
                     </h4>
                     <div className="prose prose-invert prose-sm max-w-none">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          p: ({ children }) => <p className="text-gray-300 mb-3">{children}</p>,
+                          h1: ({ children }) => <h1 className="text-white text-xl font-bold mb-3">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-white text-lg font-semibold mb-2">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-white text-md font-semibold mb-2">{children}</h3>,
+                          ul: ({ children }) => <ul className="list-disc list-inside text-gray-300 mb-3 space-y-1">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside text-gray-300 mb-3 space-y-1">{children}</ol>,
+                          li: ({ children }) => <li className="text-gray-300">{children}</li>,
+                          strong: ({ children }) => <strong className="text-white font-bold">{children}</strong>,
+                          em: ({ children }) => <em className="text-gray-300 italic">{children}</em>,
+                          code: ({ children }) => <code className="bg-gray-800 text-emerald-400 px-1 py-0.5 rounded text-xs">{children}</code>,
+                          a: ({ href, children }) => <a href={href} className="text-blue-400 hover:text-blue-300 underline">{children}</a>,
+                        }}
+                      >
                         {selectedEmail.analysis.analysis || ''}
                       </ReactMarkdown>
                     </div>

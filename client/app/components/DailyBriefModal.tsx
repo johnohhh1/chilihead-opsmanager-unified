@@ -248,7 +248,29 @@ export default function DailyBriefModal({ digest, generatedAt, sessionId: initia
                         : "bg-gray-700 text-gray-100 border border-gray-600"
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    {msg.role === "user" ? (
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    ) : (
+                      <div className="text-sm prose prose-invert prose-sm max-w-none">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p: ({ children }) => <p className="text-gray-100 mb-2">{children}</p>,
+                            ul: ({ children }) => <ul className="list-disc list-inside text-gray-100 space-y-1 mb-2">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal list-inside text-gray-100 space-y-1 mb-2">{children}</ol>,
+                            li: ({ children }) => <li className="text-gray-100">{children}</li>,
+                            strong: ({ children }) => <strong className="text-white font-bold">{children}</strong>,
+                            code: ({ children }) => <code className="bg-gray-800 text-emerald-400 px-1 py-0.5 rounded text-xs">{children}</code>,
+                            a: ({ href, children }) => <a href={href} className="text-blue-400 hover:text-blue-300 underline">{children}</a>,
+                            h1: ({ children }) => <h1 className="text-lg font-bold text-white mb-2">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-base font-bold text-white mb-2">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-sm font-semibold text-white mb-1">{children}</h3>,
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                     <p className={`text-xs mt-1 ${msg.role === "user" ? "text-red-100" : "text-gray-400"}`}>
                       {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>

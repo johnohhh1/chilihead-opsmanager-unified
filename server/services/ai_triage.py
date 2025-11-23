@@ -143,17 +143,40 @@ Provide a comprehensive analysis with:
    - Specific coverage gaps
    - Recommended actions (AUBS style)
 
-3. 📊 DASHBOARD INSIGHTS (if images present)
-   **YOU MUST REPORT ACTUAL NUMBERS FROM THE IMAGE**
-   - Sales Performance: [Extract exact $ amounts, targets, variances]
-   - Labor Performance: [Extract exact % and $ amounts vs targets]
-   - Food/Bev Cost: [Extract COGS %, actual vs target]
-   - Guest Metrics: [Extract counts, averages, trends]
-   - Other KPIs: [Any other visible metrics from the dashboard]
-   - Red Flags: [Specific metrics that are off-target with numbers]
-   - Opportunities: [Specific metrics performing well with numbers]
+3. 📊 DASHBOARD INSIGHTS (RAP Mobile/Tableau Dashboard Images)
+   🚨 MANDATORY: EXTRACT EVERY SINGLE NUMBER FROM THE DASHBOARD IMAGE 🚨
 
-   DO NOT be vague - say "Sales: $47,892 (-7.9%)" not "sales are down"
+   DO NOT SKIP THIS SECTION IF IMAGES ARE PRESENT!
+   YOU MUST LOOK AT THE IMAGE AND REPORT THESE METRICS:
+
+   **Sales Performance:**
+   - Net Sales: $[EXACT AMOUNT] ([+/-X.X%] vs LY, [+/-$XXX] vs budget)
+   - Comp Sales: [+/-X.X%]
+   - Traffic: [+/-X.X%]
+
+   **Labor Performance:**
+   - Labor Cost %: [XX.X%] (target: [XX%], variance: [+/-X.Xpp])
+   - Labor $: $[EXACT AMOUNT]
+   - Productivity: [X.X] covers per server
+
+   **Cost Management:**
+   - Food Cost: [XX.X%] ($[AMOUNT]) vs [XX%] target
+   - Bar Cost: [XX.X%] ($[AMOUNT]) vs [XX%] target
+   - Total COGS: [XX.X%] ($[AMOUNT])
+
+   **Guest Metrics:**
+   - Guest Count: [EXACT NUMBER] ([+/-X.X%] vs LY)
+   - Check Average: $[XX.XX] ([+/-X.X%] vs LY)
+   - Table Turns: [X.X]
+
+   **Other Visible KPIs:**
+   - [LIST EVERY OTHER METRIC YOU SEE WITH EXACT NUMBERS]
+
+   **Performance Flags:**
+   - 🔴 Below Target: [List metrics in RED with exact variance]
+   - 🟢 Above Target: [List metrics exceeding target with numbers]
+
+   ⚠️ FAILURE TO EXTRACT METRICS = UNACCEPTABLE ANALYSIS ⚠️
 
 4. 📅 DEADLINES & SUBMISSIONS
    - Table format with columns: Item | Due Date | Time Needed | Status
@@ -283,17 +306,24 @@ def summarize_thread_advanced(thread_id: str, use_vision: bool = True, db: Optio
             EmailAttachment.mime_type.like('image/%')
         ).all()
 
+        print(f"[Vision] Found {len(stored_attachments)} image attachments in database for thread {thread_id}")
+
         # Add stored attachments that aren't already in all_images
         for att in stored_attachments:
             # Check if already included (by checking if data matches)
             if not any(img.get('data') == att.data for img in all_images):
-                all_images.append({
-                    'mime_type': att.mime_type,
-                    'data': att.data,
-                    'filename': att.filename,
-                    'size': att.size_bytes,
-                    'from_db': True
-                })
+                # Check if attachment has data
+                if att.data:
+                    print(f"[Vision] Adding DB attachment: {att.filename} ({att.mime_type}, {len(att.data)} bytes)")
+                    all_images.append({
+                        'mime_type': att.mime_type,
+                        'data': att.data,
+                        'filename': att.filename,
+                        'size': att.size_bytes,
+                        'from_db': True
+                    })
+                else:
+                    print(f"[Vision] WARNING: DB attachment {att.filename} has no data! ID: {att.id}")
     
     # Check if this is a RAP Mobile or dashboard email
     is_dashboard_email = any(
@@ -302,25 +332,60 @@ def summarize_thread_advanced(thread_id: str, use_vision: bool = True, db: Optio
         "dashboard" in email.get("subject", "").lower()
         for email in email_content
     )
-    
+
     # Build context for AI
     thread_context = json.dumps(email_content, indent=2)
-    
+
     # Add current time context
     current_time = datetime.now()
     time_context = f"""
 Current Time: {current_time.strftime('%Y-%m-%d %H:%M:%S ET')}
 Day of Week: {current_time.strftime('%A')}
 """
-    
+
     # Build messages for GPT-4o Vision
     messages = [
         {
             "role": "system",
-            "content": "You are AUBS - Auburn Hills Assistant. Direct, helpful, restaurant-savvy. Analyze text AND images."
+            "content": "You are AUBS - Auburn Hills Assistant. Direct, helpful, restaurant-savvy. YOU MUST analyze text AND images, extracting SPECIFIC METRICS from dashboards."
         }
     ]
-    
+
+    # Build custom prompt for RAP Mobile dashboards
+    dashboard_extraction_prompt = ""
+    if is_dashboard_email and all_images:
+        dashboard_extraction_prompt = """
+🚨🚨🚨 CRITICAL: RAP MOBILE DASHBOARD DETECTED 🚨🚨🚨
+
+THIS IS NOT A SUBSCRIPTION EMAIL! This is a PERFORMANCE DASHBOARD with critical business metrics.
+
+YOU MUST EXTRACT ALL VISIBLE NUMBERS FROM THE DASHBOARD IMAGE:
+1. Look at EVERY metric shown in the image
+2. Report EXACT numbers, percentages, and dollar amounts
+3. Include variance from target/budget/LY (Last Year)
+4. Note any RED indicators or below-target metrics
+5. DO NOT say "the dashboard shows performance" - GIVE ME THE ACTUAL NUMBERS!
+
+Example of what I expect:
+❌ WRONG: "Sales are below target"
+✅ RIGHT: "Sales: $47,892 (-7.9% vs LY, -$4,108 vs budget)"
+
+❌ WRONG: "Labor costs are high"
+✅ RIGHT: "Labor: 34.2% ($16,421) vs 31% target (+3.2pp, +$1,542 over)"
+
+EXTRACT THESE SPECIFIC METRICS FROM THE IMAGE:
+- Net Sales: $ amount, % vs LY, $ vs budget
+- Labor Cost: % and $ amount, variance from target
+- Food Cost: % and $ amount, variance from target
+- Bar Cost: % and $ amount, variance from target
+- Guest Count: actual number, % change vs LY
+- Check Average: $ amount, % change vs LY
+- Server Productivity: covers per server
+- Any other KPIs visible in the dashboard
+
+THIS IS YOUR PRIMARY JOB - EXTRACT THE METRICS!
+"""
+
     # Build user message with text and images
     user_content = [
         {
@@ -332,7 +397,9 @@ Day of Week: {current_time.strftime('%A')}
 THREAD TO ANALYZE:
 {thread_context}
 
-{"📊 IMAGES ATTACHED: Analyze the dashboard/report images carefully for KPIs, trends, and actionable insights." if all_images else ""}
+{dashboard_extraction_prompt if dashboard_extraction_prompt else ""}
+
+{"📊 IMAGES ATTACHED: Extract ALL metrics, numbers, percentages from the dashboard images!" if all_images else ""}
 
 Provide both:
 1. A detailed human-readable summary following the format above (use AUBS voice)
@@ -343,14 +410,33 @@ Provide both:
     
     # Add images if present and vision is enabled
     if use_vision and all_images:
-        for img in all_images[:5]:  # Limit to 5 images to stay within token limits
-            if img.get("data"):  # Only inline images (no attachment_id fetching yet)
+        print(f"[Vision] Processing {len(all_images)} images for vision analysis")
+        print(f"[Vision] Dashboard email detected: {is_dashboard_email}")
+        images_added = 0
+        for idx, img in enumerate(all_images[:5]):  # Limit to 5 images to stay within token limits
+            if img.get("data"):
+                # Log what we're sending
+                filename = img.get('filename', 'unknown')
+                print(f"[Vision] Adding image {idx+1}: {filename} ({img.get('mime_type', 'unknown')}, {len(img['data'])} bytes)")
+
+                # Extra logging for RAP Mobile images
+                if is_dashboard_email:
+                    print(f"[Vision] 🎯 RAP MOBILE IMAGE: {filename} - AI MUST extract metrics from this!")
+
                 user_content.append({
                     "type": "image_url",
                     "image_url": {
                         "url": f"data:{img['mime_type']};base64,{img['data']}"
                     }
                 })
+                images_added += 1
+            else:
+                print(f"[Vision] Skipping image {idx+1}: {img.get('filename', 'unknown')} - no data field")
+
+        # Log summary
+        print(f"[Vision] Sent {images_added} images to GPT-4o vision API")
+        if is_dashboard_email:
+            print("[Vision] 🚨 DASHBOARD MODE: AI should extract specific metrics!")
     
     messages.append({
         "role": "user",
@@ -390,6 +476,20 @@ Provide both:
             
         content = data["choices"][0]["message"]["content"].strip()
 
+        # Log if this was a dashboard analysis
+        if is_dashboard_email:
+            print("[Vision] 📊 Dashboard Analysis Response Received")
+            # Check if metrics were extracted
+            metrics_found = any(char in content for char in ['$', '%'] if char in content)
+            if metrics_found:
+                # Count how many dollar amounts and percentages
+                dollar_count = content.count('$')
+                percent_count = content.count('%')
+                print(f"[Vision] ✅ Metrics found: {dollar_count} dollar amounts, {percent_count} percentages")
+            else:
+                print("[Vision] ⚠️ WARNING: No metrics ($, %) found in response!")
+                print("[Vision] AI may have ignored dashboard extraction instructions!")
+
         # Try to extract JSON if present
         structured_data = None
         if "```json" in content:
@@ -419,13 +519,9 @@ Provide both:
                 subject = email_content[0].get('subject', 'Unknown') if email_content else 'Unknown'
 
                 # Extract key entities/names from the analysis for better searchability
-                import re
-                entities = []
-                # Look for proper names (capitalized words) in the AI's analysis
-                names = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b', content)
-                # Common names to include
-                common_names = {'Pedro', 'Hannah', 'Blake', 'Sarah', 'Mike', 'Zimmerman'}
-                entities = [n for n in names if n in common_names][:3]  # Top 3
+                # Use structured entity extraction to avoid example names
+                from services.entity_schema import extract_entity_names
+                entities = extract_entity_names(content, source='email')
 
                 # Build searchable summary
                 entity_str = f" (re: {', '.join(entities)})" if entities else ""

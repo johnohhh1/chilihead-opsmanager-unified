@@ -205,6 +205,12 @@ class AgentMemory(Base):
     tokens_used = Column(Integer)
     confidence_score = Column(Integer)  # 0-100, how confident the agent was
     created_at = Column(DateTime, default=func.now(), index=True)
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    # Resolution tracking
+    is_resolved = Column(Boolean, default=False, index=True)
+    resolution_timestamp = Column(DateTime)
+    resolution_reason = Column(Text)
 
     __table_args__ = (
         CheckConstraint("agent_type IN ('triage', 'daily_brief', 'operations_chat', 'delegation_advisor', 'smart_triage')", name='check_agent_type'),

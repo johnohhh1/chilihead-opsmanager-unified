@@ -1,12 +1,19 @@
 """
 Model provider abstraction layer
-Supports both OpenAI and Ollama with unified interface
+Supports OpenAI, Ollama, and Anthropic Claude with unified interface
 """
 
 import os
 import httpx
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
+
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+    print("[ModelProvider] Warning: Anthropic SDK not installed")
 
 load_dotenv()
 
@@ -31,6 +38,16 @@ class ModelProvider:
             "provider": "ollama",
             "base_url": os.getenv("OLLAMA_HOST", "http://localhost:11434"),
             "api_key": None  # Ollama doesn't need API key
+        }
+
+    @staticmethod
+    def get_anthropic_config():
+        """Get Anthropic Claude configuration"""
+        return {
+            "provider": "anthropic",
+            "api_key": os.getenv("ANTHROPIC_API_KEY"),
+            "base_url": os.getenv("ANTHROPIC_BASE_URL"),  # Optional for custom endpoints
+            "model": "claude-3-5-sonnet-20241022"  # Default to Sonnet 3.5
         }
 
     @staticmethod
@@ -103,11 +120,22 @@ class ModelProvider:
         print(f"[ModelProvider] Routing model '{model}' to provider (timeout={timeout}s)...")
 
         # Determine provider based on model name
+        # Claude models: claude-3-5-sonnet-4.5, claude-3-5-sonnet, claude-3-opus, claude-3-sonnet, claude-3-haiku, claude-2, etc.
         # OpenAI models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, etc.
         # BUT NOT: gpt-oss, gpt-neox, etc. (these are local Ollama models)
-        openai_models = ["gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o1-preview", "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
 
-        # Check if it's an actual OpenAI model
+        # Check for Claude models (including Sonnet 4.5)
+        claude_models = ["claude-3-5-sonnet-4.5", "claude-3-5-sonnet", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-2", "claude-instant"]
+        is_claude = any(model.startswith(prefix) for prefix in claude_models) or "claude" in model.lower()
+
+        if is_claude:
+            if not ANTHROPIC_AVAILABLE:
+                raise ValueError("Anthropic SDK not installed. Please install with: pip install anthropic")
+            print(f"[ModelProvider] Sending '{model}' to Anthropic Claude")
+            return ModelProvider._anthropic_completion_sync(messages, model, temperature, max_tokens, timeout)
+
+        # Check for OpenAI models
+        openai_models = ["gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o1-preview", "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
         is_openai = any(model.startswith(prefix) for prefix in openai_models)
 
         # Special case: gpt-oss and gpt-neox are Ollama models
@@ -136,17 +164,28 @@ class ModelProvider:
         print(f"[ModelProvider] Async routing model '{model}' to provider...")
 
         # Determine provider based on model name
+        # Claude models: claude-3-5-sonnet-4.5, claude-3-5-sonnet, claude-3-opus, etc.
         # OpenAI models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, etc.
         # BUT NOT: gpt-oss, gpt-neox, etc. (these are local Ollama models)
+
+        # Check for Claude models (including Sonnet 4.5)
+        claude_models = ["claude-3-5-sonnet-4.5", "claude-3-5-sonnet", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-2", "claude-instant"]
+        is_claude = any(model.startswith(prefix) for prefix in claude_models) or "claude" in model.lower()
+
+        if is_claude:
+            if not ANTHROPIC_AVAILABLE:
+                raise ValueError("Anthropic SDK not installed. Please install with: pip install anthropic")
+            print(f"[ModelProvider] Async sending '{model}' to Anthropic Claude")
+            return await ModelProvider._anthropic_completion(messages, model, temperature, max_tokens)
+
+        # Check for OpenAI models
         openai_models = ["gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o1-preview", "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5", "gpt-4-turbo"]
-        
-        # Check if it's an actual OpenAI model
         is_openai = any(model.startswith(prefix) for prefix in openai_models)
-        
+
         # Special case: gpt-oss and gpt-neox are Ollama models
         if "gpt-oss" in model or "gpt-neox" in model:
             is_openai = False
-        
+
         if is_openai:
             print(f"[ModelProvider] Async sending '{model}' to OpenAI")
             return await ModelProvider._openai_completion(messages, model, temperature, max_tokens)
@@ -357,3 +396,155 @@ class ModelProvider:
             data = response.json()
 
         return data["message"]["content"].strip()
+    @staticmethod
+    def _anthropic_completion_sync(
+        messages: List[Dict],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        timeout: int = 60
+    ) -> str:
+        """Anthropic Claude completion (SYNC)"""
+        if not ANTHROPIC_AVAILABLE:
+            raise ImportError("Anthropic SDK not available")
+
+        config = ModelProvider.get_anthropic_config()
+
+        if not config["api_key"]:
+            raise ValueError("Anthropic API key not configured. Set ANTHROPIC_API_KEY in .env file")
+
+        # Map common model names to official Anthropic model IDs
+        model_map = {
+            "claude-3-5-sonnet-4.5": "claude-3-5-sonnet-20241022",  # Sonnet 3.5 (October 2024)
+            "claude-3-5-sonnet": "claude-3-5-sonnet-20241022",
+            "claude-3-opus": "claude-3-opus-20240229",
+            "claude-3-sonnet": "claude-3-sonnet-20240229",
+            "claude-3-haiku": "claude-3-haiku-20240307",
+            "claude-2.1": "claude-2.1",
+            "claude-2": "claude-2.0",
+            "claude-instant": "claude-instant-1.2"
+        }
+
+        # Use mapped model name or original if not in map
+        actual_model = model_map.get(model, model)
+
+        print(f"[Anthropic] Using model: {actual_model}")
+
+        # Initialize client
+        client_kwargs = {
+            "api_key": config["api_key"],
+            "timeout": timeout
+        }
+
+        if config.get("base_url"):
+            client_kwargs["base_url"] = config["base_url"]
+
+        client = anthropic.Anthropic(**client_kwargs)
+
+        # Convert messages to Anthropic format
+        # Separate system message from other messages
+        system_message = None
+        conversation_messages = []
+
+        for msg in messages:
+            if msg["role"] == "system":
+                # Combine multiple system messages if present
+                if system_message:
+                    system_message += "\n\n" + msg["content"]
+                else:
+                    system_message = msg["content"]
+            else:
+                conversation_messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+
+        try:
+            response = client.messages.create(
+                model=actual_model,
+                messages=conversation_messages,
+                system=system_message if system_message else None,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+            return response.content[0].text
+        except Exception as e:
+            print(f"[Anthropic API Error] {str(e)}")
+            raise
+
+    @staticmethod
+    async def _anthropic_completion(
+        messages: List[Dict],
+        model: str,
+        temperature: float,
+        max_tokens: int
+    ) -> str:
+        """Anthropic Claude completion (ASYNC)"""
+        if not ANTHROPIC_AVAILABLE:
+            raise ImportError("Anthropic SDK not available")
+
+        config = ModelProvider.get_anthropic_config()
+
+        if not config["api_key"]:
+            raise ValueError("Anthropic API key not configured. Set ANTHROPIC_API_KEY in .env file")
+
+        # Map common model names to official Anthropic model IDs
+        model_map = {
+            "claude-3-5-sonnet-4.5": "claude-3-5-sonnet-20241022",  # Sonnet 3.5 (October 2024)
+            "claude-3-5-sonnet": "claude-3-5-sonnet-20241022",
+            "claude-3-opus": "claude-3-opus-20240229",
+            "claude-3-sonnet": "claude-3-sonnet-20240229",
+            "claude-3-haiku": "claude-3-haiku-20240307",
+            "claude-2.1": "claude-2.1",
+            "claude-2": "claude-2.0",
+            "claude-instant": "claude-instant-1.2"
+        }
+
+        # Use mapped model name or original if not in map
+        actual_model = model_map.get(model, model)
+
+        print(f"[Anthropic] Using model: {actual_model}")
+
+        # Initialize async client
+        client_kwargs = {
+            "api_key": config["api_key"],
+            "timeout": 60
+        }
+
+        if config.get("base_url"):
+            client_kwargs["base_url"] = config["base_url"]
+
+        client = anthropic.AsyncAnthropic(**client_kwargs)
+
+        # Convert messages to Anthropic format
+        # Separate system message from other messages
+        system_message = None
+        conversation_messages = []
+
+        for msg in messages:
+            if msg["role"] == "system":
+                # Combine multiple system messages if present
+                if system_message:
+                    system_message += "\n\n" + msg["content"]
+                else:
+                    system_message = msg["content"]
+            else:
+                conversation_messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+
+        try:
+            response = await client.messages.create(
+                model=actual_model,
+                messages=conversation_messages,
+                system=system_message if system_message else None,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+            return response.content[0].text
+        except Exception as e:
+            print(f"[Anthropic API Error] {str(e)}")
+            raise

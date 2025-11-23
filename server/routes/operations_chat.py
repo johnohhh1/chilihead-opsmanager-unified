@@ -297,20 +297,29 @@ async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
                 # Common patterns: "the pedro issue", "payroll problem", etc.
                 import re
 
-                # Look for key nouns/topics
+                # Look for key nouns/topics dynamically
                 topics = []
-                if 'pedro' in user_msg_lower:
-                    topics.append('Pedro')
-                if 'payroll' in user_msg_lower or 'pay' in user_msg_lower:
-                    topics.append('payroll')
-                if 'schedule' in user_msg_lower:
-                    topics.append('schedule')
-                if 'invoice' in user_msg_lower:
-                    topics.append('invoice')
-                if 'hannah' in user_msg_lower or 'zimmerman' in user_msg_lower:
-                    topics.append('Hannah')
-                if 'coverage' in user_msg_lower or 'call' in user_msg_lower:
-                    topics.append('coverage')
+
+                # Extract entities from the user's message
+                from services.entity_schema import EntityExtractor
+                entities = EntityExtractor.extract_entities(user_message, context_source='user_input')
+
+                # Add high-confidence person names as topics
+                for entity in entities:
+                    if entity.entity_type == 'person' and entity.confidence > 60:
+                        topics.append(entity.name)
+
+                # Also check for common operational topics
+                topic_keywords = {
+                    'payroll': ['payroll', 'pay', 'payment', 'wages'],
+                    'schedule': ['schedule', 'scheduling', 'shift'],
+                    'invoice': ['invoice', 'billing', 'payment'],
+                    'coverage': ['coverage', 'call', 'call-off', 'absent']
+                }
+
+                for topic, keywords in topic_keywords.items():
+                    if any(keyword in user_msg_lower for keyword in keywords):
+                        topics.append(topic)
 
                 # Mark related memories as resolved
                 for topic in topics:

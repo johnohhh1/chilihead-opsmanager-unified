@@ -295,7 +295,7 @@ export default function SMSPage() {
         {/* Send Button */}
         <button
           onClick={handleSendMessage}
-          disabled={isSending || !message.trim() || selectedManagers.length === 0 || (smsStatus && !smsStatus.configured)}
+          disabled={isSending || !message.trim() || selectedManagers.length === 0 || !!(smsStatus && !smsStatus.configured)}
           className="w-full bg-red-600 text-white px-6 py-4 rounded-lg hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors text-lg font-semibold"
         >
           {isSending ? 'Sending...' : `📱 Send to ${selectedManagers.length} Manager(s)`}

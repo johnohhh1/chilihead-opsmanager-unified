@@ -132,13 +132,35 @@ def extract_message_body(payload: dict) -> str:
 def smart_triage(thread_id: str, model: str = "gpt-4o", db = None) -> dict:
     """
     Actually understand the email and provide intelligent analysis
-    Not just reformatting - real comprehension
+    WITH VISION SUPPORT for dashboard images
     """
     from .model_provider import ModelProvider
+    from .ai_triage import summarize_thread_advanced
 
     msgs = get_thread_messages(thread_id)
     if not msgs:
         return {"analysis": "No messages found", "tasks": []}
+
+    # Check if this is a dashboard email that needs vision
+    headers = msgs[0].get("payload", {}).get("headers", []) if msgs else []
+    header_dict = {h["name"].lower(): h["value"] for h in headers}
+    subject = header_dict.get("subject", "").lower()
+
+    is_dashboard = any([
+        "rap mobile" in subject,
+        "tableau" in subject,
+        "dashboard" in subject
+    ])
+
+    # Use vision-enabled analysis for dashboards or if using GPT-4o
+    if is_dashboard or model == "gpt-4o":
+        print(f"[Smart Triage] Using VISION analysis for dashboard email: {subject[:50]}")
+        vision_result = summarize_thread_advanced(thread_id, use_vision=True, db=db)
+        return {
+            "analysis": vision_result.get("summary", ""),
+            "tasks": vision_result.get("structured_data", {}).get("tasks", []),
+            "thread_id": thread_id
+        }
 
     # Get full thread content
     thread_data = []

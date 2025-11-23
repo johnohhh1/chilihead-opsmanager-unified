@@ -23,6 +23,7 @@ async def list_models():
             "models": [],
             "providers": {
                 "openai": {"status": "unknown", "message": ""},
+                "anthropic": {"status": "unknown", "message": ""},
                 "ollama": {"status": "unknown", "message": ""}
             }
         }
@@ -62,9 +63,10 @@ async def list_models():
                 },
                 {
                     "id": "gpt-4o",
-                    "name": "GPT-4 Optimized",
+                    "name": "GPT-4 Optimized (with Vision)",
                     "provider": "openai",
-                    "description": "Most capable GPT-4 model, best for complex tasks"
+                    "description": "Most capable GPT-4 model with native vision/image analysis support",
+                    "supports_vision": True
                 },
                 {
                     "id": "gpt-4o-mini",
@@ -76,7 +78,8 @@ async def list_models():
                     "id": "gpt-4-turbo",
                     "name": "GPT-4 Turbo",
                     "provider": "openai",
-                    "description": "Latest GPT-4 model with vision capabilities"
+                    "description": "Latest GPT-4 model with vision capabilities",
+                    "supports_vision": True
                 },
                 {
                     "id": "gpt-3.5-turbo",
@@ -93,6 +96,44 @@ async def list_models():
             models_response["providers"]["openai"] = {
                 "status": "not_configured",
                 "message": "OpenAI API key not found"
+            }
+
+        # Add Anthropic Claude models if configured
+        if os.getenv("ANTHROPIC_API_KEY"):
+            models_response["models"].extend([
+                {
+                    "id": "claude-sonnet-4-5-20250929",
+                    "name": "Claude Sonnet 4.5",
+                    "provider": "anthropic",
+                    "description": "Best coding model in the world - released Sept 2025"
+                },
+                {
+                    "id": "claude-3-5-sonnet-20241022",
+                    "name": "Claude 3.5 Sonnet",
+                    "provider": "anthropic",
+                    "description": "Previous generation Sonnet model"
+                },
+                {
+                    "id": "claude-3-opus-20240229",
+                    "name": "Claude 3 Opus",
+                    "provider": "anthropic",
+                    "description": "Most powerful Claude 3 model for complex tasks"
+                },
+                {
+                    "id": "claude-3-haiku-20240307",
+                    "name": "Claude 3 Haiku",
+                    "provider": "anthropic",
+                    "description": "Fast and efficient for simple tasks"
+                }
+            ])
+            models_response["providers"]["anthropic"] = {
+                "status": "connected",
+                "message": "Anthropic API configured"
+            }
+        else:
+            models_response["providers"]["anthropic"] = {
+                "status": "not_configured",
+                "message": "Anthropic API key not found (set ANTHROPIC_API_KEY in .env)"
             }
 
         # Get Ollama models
