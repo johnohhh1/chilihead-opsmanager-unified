@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Model Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: white; }
+        pre { background: #2a2a2a; padding: 10px; border-radius: 5px; }
+        .model { margin: 5px 0; padding: 5px; background: #333; }
+        .claude { background: #4a3a5a; }
+        .vision { background: #3a4a5a; }
+    </style>
+</head>
+<body>
+    <h1>Testing Model Endpoint</h1>
+    <button onclick="testModels()">Test Models Endpoint</button>
+    <div id="results"></div>
+
+    <script>
+        async function testModels() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Testing...</p>';
+
+            try {
+                // Test backend directly
+                const backendResponse = await fetch('http://localhost:8002/models/list');
+                const backendData = await backendResponse.json();
+
+                let html = '<h2>Backend Direct (port 8002):</h2>';
+                html += `<p>Total models: ${backendData.total || 0}</p>`;
+                html += '<div>';
+
+                backendData.models.forEach(model => {
+                    let className = 'model';
+                    if (model.id.includes('claude')) className += ' claude';
+                    if (model.supports_vision) className += ' vision';
+
+                    html += `<div class="${className}">
+                        <strong>${model.id}</strong>: ${model.name}
+                        ${model.supports_vision ? '(VISION)' : ''}
+                        ${model.provider === 'anthropic' ? '(CLAUDE)' : ''}
+                    </div>`;
+                });
+                html += '</div>';
+
+                // Try frontend proxy
+                try {
+                    const proxyResponse = await fetch('http://localhost:3001/api/backend/models/list');
+                    const proxyData = await proxyResponse.json();
+
+                    html += '<h2>Frontend Proxy (port 3001 -> 8002):</h2>';
+                    html += `<p>Total models: ${proxyData.total || 0}</p>`;
+
+                    const claudeModels = proxyData.models.filter(m => m.provider === 'anthropic');
+                    const visionModels = proxyData.models.filter(m => m.supports_vision);
+
+                    html += `<p>Claude models: ${claudeModels.length}</p>`;
+                    html += `<p>Vision models: ${visionModels.length}</p>`;
+                } catch (e) {
+                    html += '<h2>Frontend Proxy Error:</h2>';
+                    html += `<pre>${e.message}</pre>`;
+                }
+
+                results.innerHTML = html;
+
+            } catch (error) {
+                results.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+
+        // Auto-test on load
+        window.onload = testModels;
+    </script>
+</body>
+</html>
