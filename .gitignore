@@ -65,6 +65,7 @@ tokens/
 *.sql
 *.dump
 backup/
+_PROJECT_DUMP.txt
 
 # Windows specific
 nul
