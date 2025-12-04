@@ -19,6 +19,25 @@ services:
       timeout: 5s
       retries: 5
 
+  snappymail:
+    image: djmaze/snappymail:latest
+    container_name: unified-snappymail
+    ports:
+      - "8888:8888"
+    environment:
+      - UPLOAD_MAX_FILESIZE=25M
+      - POST_MAX_SIZE=25M
+    volumes:
+      - snappymail_data:/var/lib/snappymail
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   pgdata:
+    driver: local
+  snappymail_data:
     driver: local

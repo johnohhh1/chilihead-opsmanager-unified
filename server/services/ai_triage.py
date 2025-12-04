@@ -143,40 +143,18 @@ Provide a comprehensive analysis with:
    - Specific coverage gaps
    - Recommended actions (AUBS style)
 
-3. 📊 DASHBOARD INSIGHTS (RAP Mobile/Tableau Dashboard Images)
-   🚨 MANDATORY: EXTRACT EVERY SINGLE NUMBER FROM THE DASHBOARD IMAGE 🚨
+3. 📊 DASHBOARD INSIGHTS (if images present)
+   **YOU MUST REPORT ACTUAL NUMBERS FROM THE IMAGE**
+   - Sales Performance: [Extract exact $ amounts, targets, variances]
+   - Labor Performance: [Extract exact % and $ amounts vs targets]
+   - Food/Bev Cost: [Extract COGS %, actual vs target]
+   - Guest Metrics: [Extract counts, averages, trends]
+   - Other KPIs: [Any other visible metrics from the dashboard]
+   - Red Flags: [Specific metrics that are off-target with numbers]
+   - Opportunities: [Specific metrics performing well with numbers]
 
-   DO NOT SKIP THIS SECTION IF IMAGES ARE PRESENT!
-   YOU MUST LOOK AT THE IMAGE AND REPORT THESE METRICS:
-
-   **Sales Performance:**
-   - Net Sales: $[EXACT AMOUNT] ([+/-X.X%] vs LY, [+/-$XXX] vs budget)
-   - Comp Sales: [+/-X.X%]
-   - Traffic: [+/-X.X%]
-
-   **Labor Performance:**
-   - Labor Cost %: [XX.X%] (target: [XX%], variance: [+/-X.Xpp])
-   - Labor $: $[EXACT AMOUNT]
-   - Productivity: [X.X] covers per server
-
-   **Cost Management:**
-   - Food Cost: [XX.X%] ($[AMOUNT]) vs [XX%] target
-   - Bar Cost: [XX.X%] ($[AMOUNT]) vs [XX%] target
-   - Total COGS: [XX.X%] ($[AMOUNT])
-
-   **Guest Metrics:**
-   - Guest Count: [EXACT NUMBER] ([+/-X.X%] vs LY)
-   - Check Average: $[XX.XX] ([+/-X.X%] vs LY)
-   - Table Turns: [X.X]
-
-   **Other Visible KPIs:**
-   - [LIST EVERY OTHER METRIC YOU SEE WITH EXACT NUMBERS]
-
-   **Performance Flags:**
-   - 🔴 Below Target: [List metrics in RED with exact variance]
-   - 🟢 Above Target: [List metrics exceeding target with numbers]
-
-   ⚠️ FAILURE TO EXTRACT METRICS = UNACCEPTABLE ANALYSIS ⚠️
+   DO NOT be vague - say "Sales: $47,892 (-7.9%)" not "sales are down"
+   ONLY INCLUDE THIS SECTION IF THERE ARE ACTUAL DASHBOARD IMAGES
 
 4. 📅 DEADLINES & SUBMISSIONS
    - Table format with columns: Item | Due Date | Time Needed | Status
@@ -355,35 +333,19 @@ Day of Week: {current_time.strftime('%A')}
     dashboard_extraction_prompt = ""
     if is_dashboard_email and all_images:
         dashboard_extraction_prompt = """
-🚨🚨🚨 CRITICAL: RAP MOBILE DASHBOARD DETECTED 🚨🚨🚨
+🚨 RAP MOBILE DASHBOARD DETECTED 🚨
 
-THIS IS NOT A SUBSCRIPTION EMAIL! This is a PERFORMANCE DASHBOARD with critical business metrics.
+This is a PERFORMANCE DASHBOARD - extract the actual metrics from the image.
 
-YOU MUST EXTRACT ALL VISIBLE NUMBERS FROM THE DASHBOARD IMAGE:
-1. Look at EVERY metric shown in the image
-2. Report EXACT numbers, percentages, and dollar amounts
-3. Include variance from target/budget/LY (Last Year)
-4. Note any RED indicators or below-target metrics
-5. DO NOT say "the dashboard shows performance" - GIVE ME THE ACTUAL NUMBERS!
+CRITICAL: Report EXACT numbers from the dashboard image:
+- Sales metrics ($ amounts, % vs LY, budget variance)
+- Labor costs (% and $ amounts, variance from target)
+- Food/Bar costs (%, $ amounts, vs targets)
+- Guest metrics (counts, check averages, trends)
+- Any other KPIs visible
 
-Example of what I expect:
-❌ WRONG: "Sales are below target"
-✅ RIGHT: "Sales: $47,892 (-7.9% vs LY, -$4,108 vs budget)"
-
-❌ WRONG: "Labor costs are high"
-✅ RIGHT: "Labor: 34.2% ($16,421) vs 31% target (+3.2pp, +$1,542 over)"
-
-EXTRACT THESE SPECIFIC METRICS FROM THE IMAGE:
-- Net Sales: $ amount, % vs LY, $ vs budget
-- Labor Cost: % and $ amount, variance from target
-- Food Cost: % and $ amount, variance from target
-- Bar Cost: % and $ amount, variance from target
-- Guest Count: actual number, % change vs LY
-- Check Average: $ amount, % change vs LY
-- Server Productivity: covers per server
-- Any other KPIs visible in the dashboard
-
-THIS IS YOUR PRIMARY JOB - EXTRACT THE METRICS!
+DO NOT use placeholder values. ONLY report numbers you can actually see in the image.
+If you cannot see specific metrics in the image, DO NOT include that section.
 """
 
     # Build user message with text and images

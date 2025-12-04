@@ -1,0 +1,134 @@
+/**
+ * AUBS AI Assistant - Minimal Styles
+ * v3.0.0
+ */
+
+/* AUBS Button */
+.aubs-btn {
+    background: linear-gradient(135deg, #c41200 0%, #8b0000 100%);
+    color: white !important;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    margin-left: 8px;
+}
+
+.aubs-btn:hover {
+    background: linear-gradient(135deg, #d41400 0%, #a00000 100%);
+    transform: translateY(-1px);
+}
+
+/* Modal Overlay */
+.aubs-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+/* Modal Container */
+.aubs-modal {
+    background: white;
+    border-radius: 8px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: aubs-slide-in 0.2s ease;
+}
+
+@keyframes aubs-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Modal Header */
+.aubs-modal-header {
+    background: linear-gradient(135deg, #c41200 0%, #8b0000 100%);
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.aubs-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.aubs-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.aubs-close:hover {
+    opacity: 0.8;
+}
+
+/* Modal Body */
+.aubs-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    max-height: calc(80vh - 60px);
+    line-height: 1.6;
+}
+
+/* Response Formatting */
+.aubs-response {
+    white-space: pre-wrap;
+}
+
+.aubs-response p {
+    margin: 0 0 12px 0;
+}
+
+.aubs-response strong {
+    color: #c41200;
+}
+
+/* Loading State */
+.aubs-loading {
+    text-align: center;
+    padding: 40px;
+    font-size: 18px;
+    color: #666;
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .aubs-modal {
+        background: #2d2d2d;
+        color: #e0e0e0;
+    }
+    
+    .aubs-modal-body {
+        background: #2d2d2d;
+    }
+}
+
+html.rl-theme-dark .aubs-modal,
+html[data-theme="dark"] .aubs-modal {
+    background: #2d2d2d;
+    color: #e0e0e0;
+}

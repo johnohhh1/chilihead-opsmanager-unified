@@ -343,7 +343,7 @@ async def operations_chat(request: ChatRequest, db: Session = Depends(get_db)):
             # Add memory update info to chat record
             AgentMemoryService.record_event(
                 db=db,
-                agent_type='operations_chat',
+                agent_type='aubs',
                 event_type='question_answered',
                 summary=f"Answered: {request.message[:80]}..." + (f" [Updated {total_resolved} memories]" if total_resolved > 0 else ""),
                 context_data={

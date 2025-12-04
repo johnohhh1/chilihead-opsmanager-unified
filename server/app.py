@@ -139,7 +139,7 @@ async def summarize(payload: SummarizeIn):
 async def ai_triage(payload: SummarizeIn, db: Session = Depends(get_db)):
     """Advanced AI triage with structured extraction - now records to agent memory!"""
     try:
-        result = summarize_thread_advanced(payload.thread_id, db=db)
+        result = summarize_thread_advanced(payload.thread_id, db=db, model=payload.model)
         # Mark as analyzed
         state_manager.mark_analyzed(payload.thread_id)
         return result

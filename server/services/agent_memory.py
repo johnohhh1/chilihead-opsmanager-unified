@@ -434,43 +434,53 @@ class AgentMemoryService:
     def get_digest_context(db: Session, hours: int = 24) -> str:
         """
         Build context specifically for daily digest generation
-        Includes what triage/chat agents found recently
+        Pulls from unified AUBS memory (email triage, chat, previous digests)
 
         Returns:
             Formatted context string for digest AI
         """
-        triage_memories = AgentMemoryService.get_recent_context(
-            db, agent_type='triage', hours=hours, limit=30
+        # Get all recent AUBS memories (unified agent)
+        aubs_memories = AgentMemoryService.get_recent_context(
+            db, agent_type='aubs', hours=hours, limit=50
         )
 
-        chat_memories = AgentMemoryService.get_recent_context(
-            db, agent_type='operations_chat', hours=hours, limit=10
-        )
+        if not aubs_memories:
+            return ""
 
-        context = ["CONTEXT FROM OTHER AGENTS:\n"]
+        context = ["RECENT AUBS CONTEXT (what I've been working on):\n"]
 
-        if triage_memories:
-            context.append(f"\nEmail Triage Agent (analyzed {len(triage_memories)} emails):")
-            urgent_count = 0
-            deadline_count = 0
+        urgent_count = 0
+        deadline_count = 0
+        email_count = 0
+        chat_count = 0
 
-            for mem in triage_memories:
-                if mem.key_findings:
-                    if mem.key_findings.get('priority') == 'urgent':
-                        urgent_count += 1
-                        context.append(f"  🚨 {mem.summary}")
-                    if 'deadline' in mem.key_findings:
-                        deadline_count += 1
+        for mem in aubs_memories:
+            # Count by event type
+            if mem.event_type == 'email_analyzed':
+                email_count += 1
+            elif mem.event_type == 'question_answered':
+                chat_count += 1
 
-            if urgent_count > 0:
-                context.append(f"\n  Total urgent items flagged: {urgent_count}")
-            if deadline_count > 0:
-                context.append(f"  Total deadlines identified: {deadline_count}")
+            # Flag urgent items and deadlines
+            if mem.key_findings:
+                if mem.key_findings.get('priority') == 'urgent':
+                    urgent_count += 1
+                    context.append(f"  🚨 {mem.summary}")
+                if 'deadline' in mem.key_findings:
+                    deadline_count += 1
 
-        if chat_memories:
-            context.append(f"\nRecent Questions John Asked:")
-            for mem in chat_memories[:5]:
-                if mem.event_type == 'question_answered':
-                    context.append(f"  - {mem.summary}")
+        # Add summary stats
+        summary_parts = []
+        if email_count > 0:
+            summary_parts.append(f"{email_count} emails analyzed")
+        if chat_count > 0:
+            summary_parts.append(f"{chat_count} questions answered")
+        if urgent_count > 0:
+            summary_parts.append(f"{urgent_count} urgent items flagged")
+        if deadline_count > 0:
+            summary_parts.append(f"{deadline_count} deadlines identified")
+
+        if summary_parts:
+            context.insert(1, f"\n({', '.join(summary_parts)})\n")
 
         return "\n".join(context)

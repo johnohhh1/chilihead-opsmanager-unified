@@ -1,0 +1,3 @@
+v2.0 stack frozen on Wed 12/03/2025 at 14:16:57.18 
+Reason: Migrated to simplified unified architecture 
+Data preserved for future reference 

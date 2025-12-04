@@ -67,6 +67,36 @@ async def get_inbox(
         raise HTTPException(500, f"Failed to fetch inbox: {str(e)}")
 
 
+@router.get("/inbox/stats")
+async def get_inbox_stats(db: Session = Depends(get_db)):
+    """
+    Get inbox statistics
+    """
+    try:
+        # Get cache stats
+        cache_stats = EmailSyncService.get_cache_stats(db)
+
+        # Get inbox-specific stats
+        from models import EmailCache
+        total_inbox = db.query(EmailCache).filter(EmailCache.is_archived == False).count()
+        unread = db.query(EmailCache).filter(
+            EmailCache.is_archived == False,
+            EmailCache.is_read == False
+        ).count()
+
+        return {
+            "success": True,
+            "inbox": {
+                "total": total_inbox,
+                "unread": unread,
+                "read": total_inbox - unread
+            },
+            "cache": cache_stats
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to fetch stats: {str(e)}")
+
+
 @router.get("/inbox/{thread_id}")
 async def get_email_thread(thread_id: str, db: Session = Depends(get_db)):
     """
@@ -176,33 +206,3 @@ async def remove_watched_domain(
         }
     except Exception as e:
         raise HTTPException(500, f"Failed to remove domain: {str(e)}")
-
-
-@router.get("/inbox/stats")
-async def get_inbox_stats(db: Session = Depends(get_db)):
-    """
-    Get inbox statistics
-    """
-    try:
-        # Get cache stats
-        cache_stats = EmailSyncService.get_cache_stats(db)
-
-        # Get inbox-specific stats
-        from models import EmailCache
-        total_inbox = db.query(EmailCache).filter(EmailCache.is_archived == False).count()
-        unread = db.query(EmailCache).filter(
-            EmailCache.is_archived == False,
-            EmailCache.is_read == False
-        ).count()
-
-        return {
-            "success": True,
-            "inbox": {
-                "total": total_inbox,
-                "unread": unread,
-                "read": total_inbox - unread
-            },
-            "cache": cache_stats
-        }
-    except Exception as e:
-        raise HTTPException(500, f"Failed to fetch stats: {str(e)}")
